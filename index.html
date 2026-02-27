@@ -104,84 +104,103 @@
         }
     </script>
     <script>
-        var TILE_SERVER = 'https://aramaps-tiles.aramukmail.workers.dev';
+        var R2 = 'https://aramaps-tiles.aramukmail.workers.dev';
 
-        // Load Kurdish RTL text plugin
-        maplibregl.setRTLTextPlugin(TILE_SERVER + '/kurdish-latin-fix.js?v=' + Date.now(), true);
+        // 1. Load Kurdish RTL all-in-one plugin (latin fix + urdu swap + standard RTL)
+        if (maplibregl.getRTLTextPluginStatus() === 'unavailable') {
+            maplibregl.setRTLTextPlugin(R2 + '/kurdish-rtl-all.js', false);
+        }
 
-        // Fetch style from tile server
-        fetch(TILE_SERVER + '/style.json?v=' + Date.now())
-            .then(function(r) { return r.json(); })
-            .then(function(style) {
-                // Rewrite tile/font/sprite URLs to point to tile server
-                style.sources.openmaptiles.tiles = [TILE_SERVER + '/tiles/{z}/{x}/{y}.pbf'];
-                style.glyphs = TILE_SERVER + '/tiles/fonts/{fontstack}/{range}.pbf?v=' + Date.now();
-                style.sprite = TILE_SERVER + '/tiles/sprites/ofm';
+        // 2. Fetch style.json + iraq-mask in parallel (same as ehsblee)
+        Promise.all([
+            fetch(R2 + '/style.json').then(function(r) { return r.json(); }),
+            fetch(R2 + '/iraq-mask-30.json').then(function(r) { return r.json(); })
+        ]).then(function(results) {
+            var style = results[0];
+            var maskFC = results[1];
 
-                var map = new maplibregl.Map({
-                    container: 'map',
-                    style: style,
-                    center: [44.009, 36.191],
-                    zoom: 6,
-                    maxBounds: [[32.5, 22.5], [55.0, 43.8]],
-                    renderWorldCopies: false,
-                    attributionControl: false
-                });
-
-                // Remove MapLibre logo
-                map.on('load', function() {
-                    var logos = document.querySelectorAll('.maplibregl-ctrl-logo');
-                    for (var i = 0; i < logos.length; i++) logos[i].parentNode.removeChild(logos[i]);
-                });
-
-                map.addControl(new maplibregl.NavigationControl(), 'top-right');
-                map.addControl(new maplibregl.GeolocateControl({
-                    positionOptions: { enableHighAccuracy: true },
-                    trackUserLocation: true
-                }), 'top-right');
-
-                // Zoom display toggle (Z key)
-                var zoomEl = document.getElementById('zoom-display');
-                map.on('zoom', function() {
-                    zoomEl.textContent = 'Z ' + map.getZoom().toFixed(1);
-                });
-                document.addEventListener('keydown', function(e) {
-                    if (e.target.tagName === 'INPUT') return;
-                    if (e.key === 'z' || e.key === 'Z') {
-                        zoomEl.style.display = zoomEl.style.display === 'none' ? 'block' : 'none';
-                    }
-                });
-
-                // Search using Nominatim (free geocoding)
-                var searchInput = document.getElementById('search-input');
-                var searchBtn = document.getElementById('search-btn');
-                var searchMarker = null;
-
-                function doSearch() {
-                    var q = searchInput.value.trim();
-                    if (!q) return;
-                    fetch('https://nominatim.openstreetmap.org/search?format=json&q=' + encodeURIComponent(q) + '&viewbox=32.5,22.5,55.0,43.8&bounded=1&limit=1')
-                        .then(function(r) { return r.json(); })
-                        .then(function(results) {
-                            if (!results.length) return;
-                            var r = results[0];
-                            var lng = parseFloat(r.lon);
-                            var lat = parseFloat(r.lat);
-                            map.flyTo({ center: [lng, lat], zoom: 14 });
-                            if (searchMarker) searchMarker.remove();
-                            searchMarker = new maplibregl.Marker({ color: '#f29120' })
-                                .setLngLat([lng, lat])
-                                .setPopup(new maplibregl.Popup().setText(r.display_name))
-                                .addTo(map)
-                                .togglePopup();
-                        });
+            // 3. Add Iraq mask overlay (soft fade outside Iraq)
+            style.sources['iraq-mask'] = { type: 'geojson', data: maskFC };
+            style.layers.push({
+                id: 'iraq-mask-layer',
+                type: 'fill',
+                source: 'iraq-mask',
+                paint: {
+                    'fill-color': '#f8f4f0',
+                    'fill-opacity': ['get', 'opacity']
                 }
-
-                searchBtn.addEventListener('click', doSearch);
-                searchInput.addEventListener('keydown', function(e) {
-                    if (e.key === 'Enter') doSearch();
-                });
             });
+
+            // 4. Provide transparent placeholder for missing sprite icons
+            var map = new maplibregl.Map({
+                container: 'map',
+                style: style,
+                center: [44.009, 36.191],
+                zoom: 6,
+                maxBounds: [[32.5, 22.5], [55.0, 43.8]],
+                renderWorldCopies: false,
+                attributionControl: false
+            });
+
+            map.on('styleimagemissing', function(e) {
+                if (!map.hasImage(e.id)) {
+                    map.addImage(e.id, { width: 1, height: 1, data: new Uint8Array(4) });
+                }
+            });
+
+            map.on('load', function() {
+                var logos = document.querySelectorAll('.maplibregl-ctrl-logo');
+                for (var i = 0; i < logos.length; i++) logos[i].parentNode.removeChild(logos[i]);
+            });
+
+            map.addControl(new maplibregl.NavigationControl(), 'top-right');
+            map.addControl(new maplibregl.GeolocateControl({
+                positionOptions: { enableHighAccuracy: true },
+                trackUserLocation: true
+            }), 'top-right');
+
+            // Zoom display toggle (Z key)
+            var zoomEl = document.getElementById('zoom-display');
+            map.on('zoom', function() {
+                zoomEl.textContent = 'Z ' + map.getZoom().toFixed(1);
+            });
+            document.addEventListener('keydown', function(e) {
+                if (e.target.tagName === 'INPUT') return;
+                if (e.key === 'z' || e.key === 'Z') {
+                    zoomEl.style.display = zoomEl.style.display === 'none' ? 'block' : 'none';
+                }
+            });
+
+            // Search using Nominatim
+            var searchInput = document.getElementById('search-input');
+            var searchBtn = document.getElementById('search-btn');
+            var searchMarker = null;
+
+            function doSearch() {
+                var q = searchInput.value.trim();
+                if (!q) return;
+                fetch('https://nominatim.openstreetmap.org/search?format=json&q=' + encodeURIComponent(q) + '&viewbox=32.5,22.5,55.0,43.8&bounded=1&limit=1')
+                    .then(function(r) { return r.json(); })
+                    .then(function(results) {
+                        if (!results.length) return;
+                        var r = results[0];
+                        var lng = parseFloat(r.lon);
+                        var lat = parseFloat(r.lat);
+                        map.flyTo({ center: [lng, lat], zoom: 14 });
+                        if (searchMarker) searchMarker.remove();
+                        searchMarker = new maplibregl.Marker({ color: '#f29120' })
+                            .setLngLat([lng, lat])
+                            .setPopup(new maplibregl.Popup().setText(r.display_name))
+                            .addTo(map)
+                            .togglePopup();
+                    });
+            }
+
+            searchBtn.addEventListener('click', doSearch);
+            searchInput.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter') doSearch();
+            });
+        });
     </script>
 </body>
 </html>
