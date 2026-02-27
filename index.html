@@ -15,17 +15,17 @@
     <style>
         @font-face {
             font-family: 'PT Sans Narrow';
-            src: url('https://aramaps-tiles.aramma.workers.dev/fonts/PTSansNarrow-Regular.ttf') format('truetype');
+            src: url('https://aramaps-tiles.aramukmail.workers.dev/fonts/PTSansNarrow-Regular.ttf') format('truetype');
             font-weight: 400; font-style: normal; font-display: swap;
         }
         @font-face {
             font-family: 'PT Sans Narrow';
-            src: url('https://aramaps-tiles.aramma.workers.dev/fonts/PTSansNarrow-Bold.ttf') format('truetype');
+            src: url('https://aramaps-tiles.aramukmail.workers.dev/fonts/PTSansNarrow-Bold.ttf') format('truetype');
             font-weight: 700; font-style: normal; font-display: swap;
         }
         @font-face {
             font-family: 'Noto Naskh Arabic';
-            src: url('https://aramaps-tiles.aramma.workers.dev/fonts/NotoNaskhArabic.ttf') format('truetype');
+            src: url('https://aramaps-tiles.aramukmail.workers.dev/fonts/NotoNaskhArabic.ttf') format('truetype');
             font-weight: 400 700; font-style: normal; font-display: swap;
         }
 
@@ -104,13 +104,13 @@
         }
     </script>
     <script>
-        var TILE_SERVER = 'https://aramaps-tiles.aramma.workers.dev';
+        var TILE_SERVER = 'https://aramaps-tiles.aramukmail.workers.dev';
 
         // Load Kurdish RTL text plugin
         maplibregl.setRTLTextPlugin(TILE_SERVER + '/kurdish-latin-fix.js?v=' + Date.now(), true);
 
         // Fetch style from tile server
-        fetch(TILE_SERVER + '/tiles/style.json?v=' + Date.now())
+        fetch(TILE_SERVER + '/style.json?v=' + Date.now())
             .then(function(r) { return r.json(); })
             .then(function(style) {
                 // Rewrite tile/font/sprite URLs to point to tile server
