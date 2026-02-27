@@ -1317,6 +1317,10 @@ function setupClickHighlight() {
 
         var layerId = features[0].layer.id;
 
+        // Auto-expand panel if collapsed
+        var pb = document.getElementById('panel-body');
+        if (!pb.classList.contains('open')) pb.classList.add('open');
+
         // Clear all previous highlights
         var prev = document.querySelectorAll('.highlighted');
         for (var i = 0; i < prev.length; i++) prev[i].classList.remove('highlighted');
