@@ -439,7 +439,7 @@
         </div>
     </div>
 
-    <div id="panel-body" class="open">
+    <div id="panel-body">
     <div id="panel-scroll">
         <div class="section-title">Colors</div>
         <div id="color-list"></div>
@@ -1897,8 +1897,9 @@ function importTheme(file) {
         var dx = ex - dragX, dy = ey - dragY;
         if (Math.abs(dx) > 3 || Math.abs(dy) > 3) panelDragged = true;
         if (!panelDragged) return;
-        var newLeft = Math.max(0, Math.min(window.innerWidth - panel.offsetWidth, startLeft + dx));
-        var newTop = Math.max(0, Math.min(window.innerHeight - panel.offsetHeight, startTop + dy));
+        var gap = 8;
+        var newLeft = Math.max(gap, Math.min(window.innerWidth - panel.offsetWidth - gap, startLeft + dx));
+        var newTop = Math.max(gap, Math.min(window.innerHeight - panel.offsetHeight - gap, startTop + dy));
         panel.style.left = newLeft + 'px';
         panel.style.top = newTop + 'px';
     }
