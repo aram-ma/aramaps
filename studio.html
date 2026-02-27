@@ -117,11 +117,19 @@
         }
         .color-row-top {
             display: flex; align-items: center; gap: 8px;
+            cursor: pointer;
         }
+        .color-row-top .expand-arrow {
+            font-size: 9px; color: #666; transition: transform 0.2s;
+            width: 10px; text-align: center;
+        }
+        .color-row-top .expand-arrow.open { transform: rotate(90deg); }
         .color-row label {
             flex: 1; font-size: 12px; font-weight: 400;
             color: #bbb; cursor: pointer;
         }
+        .color-detail { display: none; padding-top: 2px; }
+        .color-detail.open { display: block; }
         .color-row input[type="color"] {
             -webkit-appearance: none;
             width: 28px; height: 20px; border: none;
@@ -165,6 +173,8 @@
             background: rgba(242, 145, 32, 0.2);
             animation: highlight-pulse 1.5s ease-out;
         }
+        .label-detail { display: none; }
+        .label-detail.open { display: block; }
         .label-row-header {
             display: flex; align-items: center; gap: 6px;
             margin-bottom: 3px; cursor: pointer;
@@ -802,9 +812,12 @@ function buildColorPanel() {
         var top = document.createElement('div');
         top.className = 'color-row-top';
 
+        var arrow = document.createElement('span');
+        arrow.className = 'expand-arrow';
+        arrow.textContent = '\u25B6';
+
         var label = document.createElement('label');
         label.textContent = group.label;
-        label.htmlFor = 'clr-' + group.id;
 
         var picker = document.createElement('input');
         picker.type = 'color';
@@ -813,11 +826,16 @@ function buildColorPanel() {
         picker.addEventListener('input', (function(gid) {
             return function(e) { setGroupColor(gid, e.target.value); };
         })(group.id));
+        picker.addEventListener('click', function(e) { e.stopPropagation(); });
 
+        top.appendChild(arrow);
         top.appendChild(label);
         top.appendChild(picker);
 
-        // Lightness slider
+        // Collapsible detail (lightness slider)
+        var detail = document.createElement('div');
+        detail.className = 'color-detail';
+
         var lt = document.createElement('input');
         lt.type = 'range';
         lt.className = 'lightness-slider';
@@ -840,8 +858,18 @@ function buildColorPanel() {
             };
         })(group.id));
 
+        detail.appendChild(lt);
+
+        // Toggle expand on header click
+        top.addEventListener('click', (function(d, a) {
+            return function() {
+                d.classList.toggle('open');
+                a.classList.toggle('open');
+            };
+        })(detail, arrow));
+
         row.appendChild(top);
-        row.appendChild(lt);
+        row.appendChild(detail);
         list.appendChild(row);
     });
 
@@ -1022,18 +1050,23 @@ function buildLabelPanel() {
             subsDiv.appendChild(subDiv);
         });
 
+        // Collapsible detail (zoom bar + size slider + sub-layers)
+        var detailDiv = document.createElement('div');
+        detailDiv.className = 'label-detail';
+        detailDiv.appendChild(bar);
+        detailDiv.appendChild(sizeRow);
+        detailDiv.appendChild(subsDiv);
+
         // Toggle expand on header click
-        header.addEventListener('click', (function(sd, ar) {
+        header.addEventListener('click', (function(dd, sd, ar) {
             return function() {
-                sd.classList.toggle('open');
+                dd.classList.toggle('open');
                 ar.classList.toggle('open');
             };
-        })(subsDiv, arrow));
+        })(detailDiv, subsDiv, arrow));
 
         row.appendChild(header);
-        row.appendChild(bar);
-        row.appendChild(sizeRow);
-        row.appendChild(subsDiv);
+        row.appendChild(detailDiv);
         list.appendChild(row);
     });
 }
