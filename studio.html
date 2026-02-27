@@ -1,0 +1,1785 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>aramaps Studio</title>
+    <link rel="icon" type="image/png" href="/icon-192.png">
+    <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.18.0/dist/maplibre-gl.css">
+    <style>
+        @font-face {
+            font-family: 'PT Sans Narrow';
+            src: url('https://aramaps-tiles.aramukmail.workers.dev/fonts/PTSansNarrow-Regular.ttf') format('truetype');
+            font-weight: 400; font-style: normal; font-display: swap;
+        }
+        @font-face {
+            font-family: 'PT Sans Narrow';
+            src: url('https://aramaps-tiles.aramukmail.workers.dev/fonts/PTSansNarrow-Bold.ttf') format('truetype');
+            font-weight: 700; font-style: normal; font-display: swap;
+        }
+        @font-face {
+            font-family: 'Noto Naskh Arabic';
+            src: url('https://aramaps-tiles.aramukmail.workers.dev/fonts/NotoNaskhArabic.ttf') format('truetype');
+            font-weight: 400 700; font-style: normal; font-display: swap;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { overflow: hidden; font-family: 'PT Sans Narrow', 'Noto Naskh Arabic', sans-serif; }
+        #map { position: absolute; top: 0; bottom: 0; width: 100%; }
+
+        /* ─── Panel ──────────────────────────────────────── */
+        #panel {
+            position: absolute; top: 16px; left: 16px; z-index: 10;
+            width: 280px;
+            background: rgba(30, 30, 40, 0.92);
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.35);
+            color: #e0e0e0;
+            backdrop-filter: blur(8px);
+            overflow: hidden;
+            max-height: calc(100vh - 32px);
+            display: flex; flex-direction: column;
+        }
+
+        /* Title bar */
+        #panel-header {
+            padding: 10px 14px 8px;
+            border-bottom: 1px solid rgba(255,255,255,0.08);
+            cursor: grab; user-select: none;
+            text-align: center; flex-shrink: 0;
+        }
+        #panel-header:active { cursor: grabbing; }
+        #panel-header h2 {
+            font-size: 13px; font-weight: 700; letter-spacing: 1px;
+            text-transform: uppercase; color: #999; margin: 0;
+        }
+
+        /* Logo preview */
+        #logo-preview {
+            padding: 12px 16px;
+            display: flex; align-items: center; gap: 10px;
+            justify-content: space-between;
+            transition: background-color 0.3s;
+            border-bottom: 1px solid rgba(255,255,255,0.08);
+            flex-shrink: 0;
+        }
+        #logo-preview img { width: 40px; height: 40px; }
+        #logo-preview .brand-text {
+            font: bold 22px 'PT Sans Narrow', sans-serif;
+            letter-spacing: 0.5px;
+        }
+        .brand-ara { color: #f29120; }
+        .brand-maps { color: #384ca0; }
+
+        #logo-left { display: flex; align-items: center; gap: 10px; }
+        #zoom-display { display: flex; flex-direction: column; align-items: center; }
+        #zoom-level {
+            font-size: 28px; font-weight: 700; line-height: 1;
+            font-family: 'PT Sans Narrow', sans-serif;
+            color: #f29120; letter-spacing: -1px;
+        }
+        #zoom-label {
+            font-size: 7px; color: #555; text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        /* Scrollable content */
+        #panel-scroll {
+            overflow-y: auto; flex: 1;
+        }
+        #panel-scroll::-webkit-scrollbar { width: 4px; }
+        #panel-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 2px; }
+
+        /* Section headers */
+        .section-title {
+            font-size: 10px; font-weight: 700; color: #666;
+            text-transform: uppercase; letter-spacing: 1px;
+            padding: 8px 12px 4px;
+            border-top: 1px solid rgba(255,255,255,0.06);
+        }
+
+        /* ─── Color rows ─────────────────────────────────── */
+        #color-list { padding: 4px 10px; }
+
+        .color-row {
+            padding: 4px 2px;
+            border-radius: 6px;
+            transition: background 0.3s;
+            margin-bottom: 1px;
+        }
+        .color-row.highlighted {
+            background: rgba(242, 145, 32, 0.2);
+            animation: highlight-pulse 1.5s ease-out;
+        }
+        @keyframes highlight-pulse {
+            0% { background: rgba(242, 145, 32, 0.5); }
+            100% { background: rgba(242, 145, 32, 0); }
+        }
+        .color-row-top {
+            display: flex; align-items: center; gap: 8px;
+        }
+        .color-row label {
+            flex: 1; font-size: 12px; font-weight: 400;
+            color: #bbb; cursor: pointer;
+        }
+        .color-row input[type="color"] {
+            -webkit-appearance: none;
+            width: 28px; height: 20px; border: none;
+            border-radius: 3px; cursor: pointer;
+            background: none; padding: 0;
+        }
+        .color-row input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
+        .color-row input[type="color"]::-webkit-color-swatch {
+            border: 2px solid rgba(255,255,255,0.15); border-radius: 3px;
+        }
+        .color-row input[type="color"]::-moz-color-swatch {
+            border: 2px solid rgba(255,255,255,0.15); border-radius: 3px;
+        }
+
+        /* Lightness slider */
+        .lightness-slider {
+            -webkit-appearance: none; appearance: none;
+            width: 100%; height: 6px; border-radius: 3px;
+            outline: none; cursor: pointer; margin-top: 3px;
+        }
+        .lightness-slider::-webkit-slider-thumb {
+            -webkit-appearance: none; appearance: none;
+            width: 12px; height: 12px; border-radius: 50%;
+            background: #fff; border: 2px solid rgba(0,0,0,0.3);
+            box-shadow: 0 1px 2px rgba(0,0,0,0.3); cursor: pointer;
+        }
+        .lightness-slider::-moz-range-thumb {
+            width: 12px; height: 12px; border-radius: 50%;
+            background: #fff; border: 2px solid rgba(0,0,0,0.3);
+            box-shadow: 0 1px 2px rgba(0,0,0,0.3); cursor: pointer;
+        }
+
+        /* ─── Label section ──────────────────────────────── */
+        #label-list { padding: 4px 10px; }
+
+        .label-row {
+            padding: 4px 2px 6px; margin-bottom: 2px;
+            border-radius: 6px; transition: background 0.3s;
+        }
+        .label-row.highlighted {
+            background: rgba(242, 145, 32, 0.2);
+            animation: highlight-pulse 1.5s ease-out;
+        }
+        .label-row-header {
+            display: flex; align-items: center; gap: 6px;
+            margin-bottom: 3px; cursor: pointer;
+        }
+        .label-row-header .expand-arrow {
+            font-size: 9px; color: #666; transition: transform 0.2s;
+            width: 10px; text-align: center;
+        }
+        .label-row-header .expand-arrow.open { transform: rotate(90deg); }
+        .label-row-header span.lbl-name {
+            font-size: 11px; color: #bbb; flex: 1;
+        }
+
+        /* Sub-layers (collapsed by default) */
+        .label-subs { display: none; padding-left: 12px; }
+        .label-subs.open { display: block; }
+        .label-sub {
+            padding: 3px 0; border-radius: 4px; transition: background 0.3s;
+        }
+        .label-sub.highlighted {
+            background: rgba(242, 145, 32, 0.2);
+            animation: highlight-pulse 1.5s ease-out;
+        }
+        .label-sub-header {
+            display: flex; align-items: center; gap: 4px;
+            margin-bottom: 2px;
+        }
+        .label-sub-header span.sub-name {
+            font-size: 10px; color: #999; flex: 1;
+        }
+        .label-sub-header span.sub-zoom {
+            font-size: 9px; color: #555; font-family: monospace;
+        }
+        .label-zoom-values {
+            font-size: 9px; color: #666; font-family: monospace;
+        }
+
+        /* Zoom timeline bar */
+        .zoom-bar {
+            position: relative; height: 14px;
+            background: rgba(255,255,255,0.06);
+            border-radius: 3px; margin-bottom: 2px;
+            cursor: default;
+        }
+        .zoom-clip {
+            position: absolute; top: 0; height: 100%;
+            background: rgba(56, 76, 160, 0.5);
+            border-radius: 3px;
+            min-width: 4px;
+        }
+        .zoom-handle {
+            position: absolute; top: -1px; width: 6px; height: 16px;
+            background: #7b9fd4; border-radius: 2px;
+            cursor: ew-resize; z-index: 1;
+        }
+        .zoom-handle:hover { background: #f29120; }
+        .zoom-handle.left { left: 0; border-radius: 2px 0 0 2px; }
+        .zoom-handle.right { right: 0; border-radius: 0 2px 2px 0; }
+
+        /* Zoom scale ticks */
+        .zoom-scale {
+            display: flex; justify-content: space-between;
+            font-size: 8px; color: #555; padding: 0 1px;
+            margin-bottom: 2px;
+        }
+
+        /* Text size slider */
+        .size-row {
+            display: flex; align-items: center; gap: 4px;
+        }
+        .size-row span {
+            font-size: 9px; color: #666; min-width: 22px;
+            font-family: monospace; text-align: center;
+        }
+        .size-slider {
+            -webkit-appearance: none; appearance: none;
+            flex: 1; height: 4px; border-radius: 2px;
+            background: rgba(255,255,255,0.1);
+            outline: none; cursor: pointer;
+        }
+        .size-slider::-webkit-slider-thumb {
+            -webkit-appearance: none; appearance: none;
+            width: 10px; height: 10px; border-radius: 50%;
+            background: #ccc; border: 1px solid rgba(0,0,0,0.2);
+            cursor: pointer;
+        }
+        .size-slider::-moz-range-thumb {
+            width: 10px; height: 10px; border-radius: 50%;
+            background: #ccc; border: 1px solid rgba(0,0,0,0.2);
+            cursor: pointer;
+        }
+
+        /* ─── Sprite selector ────────────────────────────── */
+        #sprite-section {
+            padding: 8px 10px;
+            border-top: 1px solid rgba(255,255,255,0.08);
+        }
+        #sprite-section > label {
+            font-size: 10px; font-weight: 700; color: #666;
+            text-transform: uppercase; letter-spacing: 0.5px;
+            display: block; margin-bottom: 5px;
+        }
+        #sprite-select {
+            width: 100%; padding: 5px 8px; font-size: 12px;
+            font-family: 'PT Sans Narrow', sans-serif;
+            background: rgba(255,255,255,0.08); color: #ccc;
+            border: 1px solid rgba(255,255,255,0.1); border-radius: 5px;
+            cursor: pointer;
+        }
+        #sprite-select:focus { outline: none; border-color: rgba(255,255,255,0.3); }
+        #sprite-select option { background: #2a2a35; color: #ccc; }
+
+        /* ─── Actions ────────────────────────────────────── */
+        #panel-actions {
+            padding: 8px 10px 12px;
+            display: flex; gap: 6px;
+            border-top: 1px solid rgba(255,255,255,0.08);
+            flex-shrink: 0;
+        }
+        #panel-actions button {
+            flex: 1; padding: 6px 0; font-size: 11px; font-weight: 700;
+            font-family: 'PT Sans Narrow', sans-serif;
+            border: none; border-radius: 5px; cursor: pointer;
+            letter-spacing: 0.3px; transition: background 0.15s;
+        }
+        #btn-reset { background: rgba(255,255,255,0.1); color: #ccc; }
+        #btn-reset:hover { background: rgba(255,255,255,0.18); }
+        #btn-export { background: #384ca0; color: #fff; }
+        #btn-export:hover { background: #495eb8; }
+        #btn-import { background: rgba(255,255,255,0.1); color: #ccc; }
+        #btn-import:hover { background: rgba(255,255,255,0.18); }
+
+        #import-file { display: none; }
+
+        /* ─── Map brand (lower-left) ───────────────── */
+        #map-brand {
+            position: absolute; bottom: 10px; left: 10px; z-index: 2;
+            display: flex; flex-direction: column; align-items: center; gap: 4px;
+            pointer-events: none;
+        }
+        #map-qr {
+            width: 80px; height: 80px;
+            background: white; border-radius: 6px; padding: 4px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+            pointer-events: auto; cursor: pointer;
+        }
+        #map-qr img { width: 100%; height: 100%; }
+        #map-logo-row {
+            display: flex; align-items: center; gap: 0;
+            font: bold 14px 'PT Sans Narrow', sans-serif;
+            text-shadow: 0 1px 2px rgba(255,255,255,0.8);
+        }
+        #map-logo-row img { width: 48px; height: 48px; }
+        #map-logo-row .m-ara { color: #f29120; margin-left: -8px; }
+        #map-logo-row .m-maps { color: #384ca0; }
+
+        /* ─── Select tool button ────────────────────── */
+        #select-tool {
+            position: absolute; bottom: 160px; right: 10px; z-index: 2;
+            width: 40px; height: 40px; border-radius: 8px;
+            background: rgba(30, 30, 40, 0.85); color: #ccc; border: none;
+            font-size: 20px; cursor: pointer;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+            display: flex; align-items: center; justify-content: center;
+            transition: background 0.2s, color 0.2s;
+        }
+        #select-tool:hover { background: rgba(50, 50, 60, 0.9); }
+        #select-tool.active { background: #f29120; color: #fff; }
+
+        #map.select-mode { cursor: crosshair; }
+        #map.select-mode .maplibregl-canvas { cursor: crosshair !important; }
+
+        /* ─── Label popup ───────────────────────────── */
+        .label-popup {
+            position: absolute; z-index: 20;
+            background: rgba(25, 25, 35, 0.95);
+            border-radius: 10px; padding: 12px 14px;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+            color: #e0e0e0; min-width: 220px; max-width: 280px;
+            backdrop-filter: blur(8px);
+            font-family: 'PT Sans Narrow', sans-serif;
+        }
+        .label-popup-name {
+            font-size: 16px; font-weight: 700; color: #fff;
+            margin-bottom: 2px; word-break: break-word;
+        }
+        .label-popup-layer {
+            font-size: 10px; color: #777; margin-bottom: 10px;
+        }
+        .label-popup-actions {
+            display: flex; gap: 6px; margin-bottom: 8px;
+        }
+        .label-popup-actions button {
+            flex: 1; padding: 5px 0; font-size: 11px; font-weight: 700;
+            font-family: 'PT Sans Narrow', sans-serif;
+            border: none; border-radius: 5px; cursor: pointer;
+            transition: background 0.15s;
+        }
+        .lp-hide { background: #c0392b; color: #fff; }
+        .lp-hide:hover { background: #e74c3c; }
+        .lp-reset { background: rgba(255,255,255,0.1); color: #ccc; }
+        .lp-reset:hover { background: rgba(255,255,255,0.18); }
+        .label-popup-rename {
+            display: flex; flex-direction: column; gap: 5px;
+        }
+        .label-popup-rename input {
+            width: 100%; padding: 5px 8px; font-size: 12px;
+            font-family: 'PT Sans Narrow', sans-serif;
+            background: rgba(255,255,255,0.08); color: #fff;
+            border: 1px solid rgba(255,255,255,0.15); border-radius: 5px;
+        }
+        .label-popup-rename input:focus { outline: none; border-color: #f29120; }
+        .label-popup-rename-btns {
+            display: flex; gap: 6px;
+        }
+        .label-popup-rename-btns button {
+            flex: 1; padding: 5px 0; font-size: 11px; font-weight: 700;
+            font-family: 'PT Sans Narrow', sans-serif;
+            border: none; border-radius: 5px; cursor: pointer;
+        }
+        .lp-apply { background: #384ca0; color: #fff; }
+        .lp-apply:hover { background: #495eb8; }
+        .lp-cancel { background: rgba(255,255,255,0.1); color: #ccc; }
+        .lp-cancel:hover { background: rgba(255,255,255,0.18); }
+
+        @media (max-width: 600px) {
+            #panel { width: 250px; top: 8px; left: 8px; }
+            #map-qr { width: 60px; height: 60px; }
+            #map-logo-row img { width: 36px; height: 36px; }
+            #map-logo-row { font-size: 12px; }
+            #select-tool { bottom: 120px; width: 36px; height: 36px; font-size: 18px; }
+        }
+    </style>
+</head>
+<body>
+
+<div id="map"></div>
+
+<!-- Brand: QR + Logo — lower left -->
+<div id="map-brand">
+    <div id="map-qr" title="Scan to open on phone" style="display:none"></div>
+    <div id="map-logo-row">
+        <img src="/logo.svg" alt="">
+        <span class="m-ara">ara</span><span class="m-maps">maps</span>
+    </div>
+</div>
+
+<!-- Select tool button -->
+<button id="select-tool" title="Select label tool">&#x2295;</button>
+
+<!-- Label popup (created dynamically by JS) -->
+
+<div id="panel">
+    <div id="panel-header">
+        <h2>Color Theme Studio</h2>
+    </div>
+
+    <div id="logo-preview">
+        <div id="logo-left">
+            <img src="/logo.svg" alt="">
+            <span class="brand-text"><span class="brand-ara">ara</span><span class="brand-maps">maps</span></span>
+        </div>
+        <div id="zoom-display">
+            <span id="zoom-level">7.0</span>
+            <span id="zoom-label">zoom</span>
+        </div>
+    </div>
+
+    <div id="panel-scroll">
+        <div class="section-title">Colors</div>
+        <div id="color-list"></div>
+
+        <div class="section-title">Labels</div>
+        <div id="label-list"></div>
+
+        <div id="sprite-section">
+            <label>Icon Set (Sprites)</label>
+            <select id="sprite-select">
+                <option value="R2:/tiles/sprites/ofm">OpenFreeMap (264)</option>
+                <option value="LOCAL:/sprites/maki">Maki (215)</option>
+                <option value="LOCAL:/sprites/temaki">Temaki (543)</option>
+            </select>
+        </div>
+    </div>
+
+    <div id="panel-actions">
+        <button id="btn-reset">Reset</button>
+        <button id="btn-export">Export</button>
+        <button id="btn-import">Import</button>
+    </div>
+</div>
+
+<input type="file" id="import-file" accept=".json">
+
+<script src="https://unpkg.com/maplibre-gl@5.18.0/dist/maplibre-gl.js"></script>
+<script src="/mapbox-gl-rtl-text.js"></script>
+<script>
+// ─── Color Group Definitions ──────────────────────────────────────────────────
+
+var COLOR_GROUPS = [
+    { id: 'background', label: 'Background', defaultColor: '#f8f4f0',
+      rules: [{ match: ['background'], prop: 'background-color' }] },
+    { id: 'earth', label: 'Earth / Land', defaultColor: '#e8e0d8',
+      rules: [{ prefixes: ['landuse_', 'landcover_sand', 'aeroway_fill'], prop: 'fill-color' }] },
+    { id: 'parks', label: 'Parks / Green', defaultColor: '#d8e8c8',
+      rules: [{ match: ['park', 'landcover_wood', 'landcover_grass'], prop: 'fill-color' }] },
+    { id: 'water', label: 'Water', defaultColor: '#a0c8f0',
+      rules: [{ match: ['water'], prop: 'fill-color' },
+              { prefixes: ['waterway_'], prop: 'line-color', excludeSuffix: '_label' }] },
+    { id: 'roads_minor', label: 'Roads (minor)', defaultColor: '#ffffff',
+      rules: [{ prefixes: ['road_minor','road_service','road_link','road_path',
+                'tunnel_minor','tunnel_service','tunnel_link','tunnel_path',
+                'bridge_street','bridge_service','bridge_link','bridge_path_pedestrian'],
+                prop: 'line-color', excludeSuffix: '_casing' }] },
+    { id: 'roads_major', label: 'Roads (major)', defaultColor: '#e9ac77',
+      rules: [{ prefixes: ['road_secondary','road_trunk','road_motorway',
+                'tunnel_secondary','tunnel_trunk','tunnel_motorway',
+                'bridge_secondary','bridge_trunk','bridge_motorway'],
+                prop: 'line-color', excludeSuffix: '_casing' }] },
+    { id: 'buildings', label: 'Buildings', defaultColor: '#d4ccc4',
+      rules: [{ prefixes: ['building'], prop: 'fill-color' }] },
+    { id: 'boundaries', label: 'Boundaries', defaultColor: '#8060a0',
+      rules: [{ prefixes: ['boundary_'], prop: 'line-color' }] },
+    { id: 'labels', label: 'Labels', defaultColor: '#333333',
+      rules: [{ prefixes: ['label_','highway-name-','poi_','water_name_','waterway_line_label','airport'], prop: 'text-color' }] },
+    { id: 'halos', label: 'Label Halos', defaultColor: '#ffffff',
+      rules: [{ prefixes: ['label_','highway-name-','poi_','water_name_','waterway_line_label','airport'], prop: 'text-halo-color' }] }
+];
+
+
+// ─── Label Group Definitions ──────────────────────────────────────────────────
+
+var MAX_ZOOM = 24;
+
+var LABEL_GROUPS = [
+    { id: 'lbl_countries', label: 'Countries',
+      defaultMin: 0, defaultMax: 9, defaultSize: 16, sizeRange: [8, 32],
+      subs: [
+        { layer: 'label_country_1', label: 'Country rank 1', defaultMin: 0, defaultMax: 9, defaultSize: 18 },
+        { layer: 'label_country_2', label: 'Country rank 2', defaultMin: 0, defaultMax: 9, defaultSize: 16 },
+        { layer: 'label_country_3', label: 'Country rank 3', defaultMin: 2, defaultMax: 9, defaultSize: 14 }
+      ] },
+    { id: 'lbl_states', label: 'States',
+      defaultMin: 5, defaultMax: 8, defaultSize: 15, sizeRange: [8, 28],
+      subs: [
+        { layer: 'label_state', label: 'State', defaultMin: 5, defaultMax: 8, defaultSize: 15 }
+      ] },
+    { id: 'lbl_cities', label: 'Cities',
+      defaultMin: 3, defaultMax: 14, defaultSize: 18, sizeRange: [8, 32],
+      subs: [
+        { layer: 'label_city_capital', label: 'Capital', defaultMin: 3, defaultMax: 14, defaultSize: 20 },
+        { layer: 'label_city', label: 'City', defaultMin: 3, defaultMax: 14, defaultSize: 18 }
+      ] },
+    { id: 'lbl_towns', label: 'Towns',
+      defaultMin: 6, defaultMax: 14, defaultSize: 16, sizeRange: [8, 26],
+      subs: [
+        { layer: 'label_town', label: 'Town', defaultMin: 6, defaultMax: 14, defaultSize: 16 }
+      ] },
+    { id: 'lbl_villages', label: 'Villages',
+      defaultMin: 9, defaultMax: 14, defaultSize: 14, sizeRange: [8, 22],
+      subs: [
+        { layer: 'label_village', label: 'Village', defaultMin: 9, defaultMax: 14, defaultSize: 14 }
+      ] },
+    { id: 'lbl_other', label: 'Other places',
+      defaultMin: 8, defaultMax: 14, defaultSize: 13, sizeRange: [8, 20],
+      subs: [
+        { layer: 'label_other', label: 'Other', defaultMin: 8, defaultMax: 14, defaultSize: 13 }
+      ] },
+    { id: 'lbl_roads', label: 'Roads',
+      defaultMin: 12, defaultMax: 18, defaultSize: 15, sizeRange: [8, 22],
+      subs: [
+        { layer: 'highway-name-major', label: 'Major', defaultMin: 12, defaultMax: 18, defaultSize: 16 },
+        { layer: 'highway-name-minor', label: 'Minor', defaultMin: 15, defaultMax: 18, defaultSize: 14 },
+        { layer: 'highway-name-path', label: 'Path', defaultMin: 15, defaultMax: 18, defaultSize: 14 }
+      ] },
+    { id: 'lbl_poi', label: 'POI',
+      defaultMin: 14, defaultMax: 22, defaultSize: 14, sizeRange: [8, 22],
+      subs: [
+        { layer: 'poi_r1', label: 'High rank', defaultMin: 15, defaultMax: 22, defaultSize: 15 },
+        { layer: 'poi_r7', label: 'Mid rank', defaultMin: 16, defaultMax: 22, defaultSize: 14 },
+        { layer: 'poi_r20', label: 'Low rank', defaultMin: 17, defaultMax: 22, defaultSize: 14 },
+        { layer: 'poi_transit', label: 'Transit', defaultMin: 14, defaultMax: 22, defaultSize: 14 }
+      ] },
+    { id: 'lbl_water', label: 'Water labels',
+      defaultMin: 10, defaultMax: 18, defaultSize: 16, sizeRange: [8, 24],
+      subs: [
+        { layer: 'waterway_line_label', label: 'Waterway', defaultMin: 10, defaultMax: 18, defaultSize: 16 },
+        { layer: 'water_name_point_label', label: 'Water point', defaultMin: 0, defaultMax: 18, defaultSize: 16 },
+        { layer: 'water_name_line_label', label: 'Water line', defaultMin: 0, defaultMax: 18, defaultSize: 16 }
+      ] },
+    { id: 'lbl_airport', label: 'Airports',
+      defaultMin: 10, defaultMax: 16, defaultSize: 15, sizeRange: [8, 22],
+      subs: [
+        { layer: 'airport', label: 'Airport', defaultMin: 10, defaultMax: 16, defaultSize: 15 }
+      ] }
+];
+
+
+// ─── State ────────────────────────────────────────────────────────────────────
+
+var STORAGE_KEY = 'aramaps-studio-v2';
+var currentColors = {};
+var currentLabels = {};
+var labelEdits = { hidden: {}, renamed: [] };
+var originalFilters = {};
+var selectMode = false;
+var map;
+
+function loadColorDefaults() {
+    var c = {};
+    COLOR_GROUPS.forEach(function(g) { c[g.id] = g.defaultColor; });
+    return c;
+}
+
+function loadLabelDefaults() {
+    var l = {};
+    LABEL_GROUPS.forEach(function(g) {
+        l[g.id] = { min: g.defaultMin, max: g.defaultMax, size: g.defaultSize, subs: {} };
+        g.subs.forEach(function(s) {
+            l[g.id].subs[s.layer] = { min: s.defaultMin, max: s.defaultMax, size: s.defaultSize };
+        });
+    });
+    return l;
+}
+
+function loadFromStorage() {
+    try {
+        var saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
+        if (saved) {
+            currentColors = loadColorDefaults();
+            currentLabels = loadLabelDefaults();
+            if (saved.colors) {
+                for (var k in saved.colors) {
+                    if (currentColors.hasOwnProperty(k)) currentColors[k] = saved.colors[k];
+                }
+            }
+            if (saved.labels) {
+                for (var k in saved.labels) {
+                    if (currentLabels.hasOwnProperty(k)) {
+                        currentLabels[k] = saved.labels[k];
+                    }
+                }
+            }
+            if (saved.labelEdits) {
+                labelEdits = saved.labelEdits;
+            }
+            return;
+        }
+    } catch (e) {}
+    currentColors = loadColorDefaults();
+    currentLabels = loadLabelDefaults();
+}
+
+function saveToStorage() {
+    try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({
+            colors: currentColors, labels: currentLabels, labelEdits: labelEdits
+        }));
+    } catch (e) {}
+}
+
+
+// ─── Color helpers ───────────────────────────────────────────────────────────
+
+function hexToHsl(hex) {
+    var r = parseInt(hex.slice(1,3),16)/255;
+    var g = parseInt(hex.slice(3,5),16)/255;
+    var b = parseInt(hex.slice(5,7),16)/255;
+    var max = Math.max(r,g,b), min = Math.min(r,g,b);
+    var h, s, l = (max+min)/2;
+    if (max === min) { h = s = 0; }
+    else {
+        var d = max - min;
+        s = l > 0.5 ? d/(2-max-min) : d/(max+min);
+        if (max === r) h = ((g-b)/d + (g<b?6:0))/6;
+        else if (max === g) h = ((b-r)/d+2)/6;
+        else h = ((r-g)/d+4)/6;
+    }
+    return [Math.round(h*360), Math.round(s*100), Math.round(l*100)];
+}
+
+function hslToHex(h, s, l) {
+    h /= 360; s /= 100; l /= 100;
+    var r, g, b;
+    if (s === 0) { r = g = b = l; }
+    else {
+        function hue2rgb(p, q, t) {
+            if (t < 0) t += 1; if (t > 1) t -= 1;
+            if (t < 1/6) return p + (q-p)*6*t;
+            if (t < 1/2) return q;
+            if (t < 2/3) return p + (q-p)*(2/3-t)*6;
+            return p;
+        }
+        var q = l < 0.5 ? l*(1+s) : l+s-l*s;
+        var p = 2*l - q;
+        r = hue2rgb(p, q, h+1/3);
+        g = hue2rgb(p, q, h);
+        b = hue2rgb(p, q, h-1/3);
+    }
+    function toHex(x) { var h = Math.round(x*255).toString(16); return h.length===1?'0'+h:h; }
+    return '#' + toHex(r) + toHex(g) + toHex(b);
+}
+
+function lightnessGradient(hex) {
+    var hsl = hexToHsl(hex);
+    var dark = hslToHex(hsl[0], hsl[1], 10);
+    var mid = hslToHex(hsl[0], hsl[1], 50);
+    var light = hslToHex(hsl[0], hsl[1], 95);
+    return 'linear-gradient(to right, ' + dark + ', ' + mid + ', ' + light + ')';
+}
+
+
+// ─── Layer matching ───────────────────────────────────────────────────────────
+
+function layerMatchesRule(layerId, rule) {
+    if (rule.excludeSuffix && layerId.endsWith(rule.excludeSuffix)) return false;
+    if (rule.match && rule.match.indexOf(layerId) !== -1) return true;
+    if (rule.prefixes) {
+        for (var i = 0; i < rule.prefixes.length; i++) {
+            if (layerId.indexOf(rule.prefixes[i]) === 0) return true;
+        }
+    }
+    return false;
+}
+
+function findGroupForLayer(layerId) {
+    for (var i = 0; i < COLOR_GROUPS.length; i++) {
+        var g = COLOR_GROUPS[i];
+        for (var r = 0; r < g.rules.length; r++) {
+            if (layerMatchesRule(layerId, g.rules[r])) return g.id;
+        }
+    }
+    return null;
+}
+
+function applyColor(groupId, color) {
+    if (!map || !map.isStyleLoaded()) return;
+    var group = null;
+    for (var i = 0; i < COLOR_GROUPS.length; i++) {
+        if (COLOR_GROUPS[i].id === groupId) { group = COLOR_GROUPS[i]; break; }
+    }
+    if (!group) return;
+    var layers = map.getStyle().layers;
+    for (var j = 0; j < layers.length; j++) {
+        var lid = layers[j].id;
+        for (var r = 0; r < group.rules.length; r++) {
+            if (layerMatchesRule(lid, group.rules[r])) {
+                try { map.setPaintProperty(lid, group.rules[r].prop, color); } catch (e) {}
+            }
+        }
+    }
+    if (groupId === 'background') {
+        document.getElementById('logo-preview').style.backgroundColor = color;
+        // Sync mask color with background
+        try { map.setPaintProperty('iraq-mask-layer', 'fill-color', color); } catch (e) {}
+    }
+}
+
+function applyAllColors() {
+    for (var key in currentColors) applyColor(key, currentColors[key]);
+}
+
+function findLabelGroupForLayer(layerId) {
+    for (var i = 0; i < LABEL_GROUPS.length; i++) {
+        var g = LABEL_GROUPS[i];
+        for (var j = 0; j < g.subs.length; j++) {
+            if (g.subs[j].layer === layerId) return { groupId: g.id, layer: layerId };
+        }
+    }
+    return null;
+}
+
+function applySubLayer(groupId, layerId) {
+    if (!map || !map.isStyleLoaded()) return;
+    var data = currentLabels[groupId];
+    if (!data || !data.subs || !data.subs[layerId]) return;
+    var sub = data.subs[layerId];
+    try {
+        map.setLayerZoomRange(layerId, sub.min, sub.max);
+        map.setLayoutProperty(layerId, 'text-size', sub.size);
+    } catch (e) {}
+}
+
+function applyLabelGroup(groupId) {
+    if (!map || !map.isStyleLoaded()) return;
+    var group = null;
+    for (var i = 0; i < LABEL_GROUPS.length; i++) {
+        if (LABEL_GROUPS[i].id === groupId) { group = LABEL_GROUPS[i]; break; }
+    }
+    if (!group) return;
+    var data = currentLabels[groupId];
+    group.subs.forEach(function(s) {
+        var sub = data.subs[s.layer];
+        if (sub) {
+            try {
+                map.setLayerZoomRange(s.layer, sub.min, sub.max);
+                map.setLayoutProperty(s.layer, 'text-size', sub.size);
+            } catch (e) {}
+        }
+    });
+}
+
+function applyAllLabels() {
+    for (var key in currentLabels) applyLabelGroup(key);
+}
+
+
+// ─── Set color (sync picker + lightness) ─────────────────────────────────────
+
+function setGroupColor(groupId, color) {
+    currentColors[groupId] = color;
+    applyColor(groupId, color);
+    saveToStorage();
+    var picker = document.getElementById('clr-' + groupId);
+    var slider = document.getElementById('lt-' + groupId);
+    if (picker) picker.value = color;
+    if (slider) {
+        slider.value = hexToHsl(color)[2];
+        slider.style.background = lightnessGradient(color);
+    }
+}
+
+
+// ─── Build Color Panel ───────────────────────────────────────────────────────
+
+function buildColorPanel() {
+    var list = document.getElementById('color-list');
+    list.innerHTML = '';
+
+    COLOR_GROUPS.forEach(function(group) {
+        var row = document.createElement('div');
+        row.className = 'color-row';
+        row.id = 'crow-' + group.id;
+
+        var top = document.createElement('div');
+        top.className = 'color-row-top';
+
+        var label = document.createElement('label');
+        label.textContent = group.label;
+        label.htmlFor = 'clr-' + group.id;
+
+        var picker = document.createElement('input');
+        picker.type = 'color';
+        picker.id = 'clr-' + group.id;
+        picker.value = currentColors[group.id] || group.defaultColor;
+        picker.addEventListener('input', (function(gid) {
+            return function(e) { setGroupColor(gid, e.target.value); };
+        })(group.id));
+
+        top.appendChild(label);
+        top.appendChild(picker);
+
+        // Lightness slider
+        var lt = document.createElement('input');
+        lt.type = 'range';
+        lt.className = 'lightness-slider';
+        lt.id = 'lt-' + group.id;
+        lt.min = 5; lt.max = 95; lt.step = 1;
+        var initColor = currentColors[group.id] || group.defaultColor;
+        lt.value = hexToHsl(initColor)[2];
+        lt.style.background = lightnessGradient(initColor);
+        lt.addEventListener('input', (function(gid) {
+            return function(e) {
+                var cur = currentColors[gid];
+                var hsl = hexToHsl(cur);
+                var newColor = hslToHex(hsl[0], hsl[1], parseInt(e.target.value));
+                currentColors[gid] = newColor;
+                applyColor(gid, newColor);
+                saveToStorage();
+                var picker = document.getElementById('clr-' + gid);
+                if (picker) picker.value = newColor;
+                e.target.style.background = lightnessGradient(newColor);
+            };
+        })(group.id));
+
+        row.appendChild(top);
+        row.appendChild(lt);
+        list.appendChild(row);
+    });
+
+    document.getElementById('logo-preview').style.backgroundColor =
+        currentColors['background'] || '#f8f4f0';
+}
+
+
+// ─── Build Label Panel ───────────────────────────────────────────────────────
+
+function buildLabelPanel() {
+    var list = document.getElementById('label-list');
+    list.innerHTML = '';
+
+    LABEL_GROUPS.forEach(function(group) {
+        var data = currentLabels[group.id];
+        var row = document.createElement('div');
+        row.className = 'label-row';
+        row.id = 'lrow-' + group.id;
+
+        // Header with expand arrow
+        var header = document.createElement('div');
+        header.className = 'label-row-header';
+
+        var arrow = document.createElement('span');
+        arrow.className = 'expand-arrow';
+        arrow.textContent = '\u25B6';
+
+        var nameSpan = document.createElement('span');
+        nameSpan.className = 'lbl-name';
+        nameSpan.textContent = group.label;
+
+        var valSpan = document.createElement('span');
+        valSpan.className = 'label-zoom-values';
+        valSpan.id = 'lzv-' + group.id;
+        valSpan.textContent = 'z' + data.min + '\u2013' + data.max;
+
+        header.appendChild(arrow);
+        header.appendChild(nameSpan);
+        header.appendChild(valSpan);
+
+        // Group-level zoom bar
+        var bar = document.createElement('div');
+        bar.className = 'zoom-bar';
+        bar.id = 'zbar-' + group.id;
+
+        var clip = document.createElement('div');
+        clip.className = 'zoom-clip';
+        clip.id = 'zclip-' + group.id;
+
+        var handleL = document.createElement('div');
+        handleL.className = 'zoom-handle left';
+        var handleR = document.createElement('div');
+        handleR.className = 'zoom-handle right';
+
+        clip.appendChild(handleL);
+        clip.appendChild(handleR);
+        bar.appendChild(clip);
+        positionClip(group.id, data.min, data.max, clip);
+        setupZoomDrag(group, bar, clip, handleL, handleR);
+
+        // Group-level size slider
+        var sizeRow = document.createElement('div');
+        sizeRow.className = 'size-row';
+        var sizeMin = document.createElement('span');
+        sizeMin.textContent = group.sizeRange[0] + 'px';
+        var sizeSlider = document.createElement('input');
+        sizeSlider.type = 'range';
+        sizeSlider.className = 'size-slider';
+        sizeSlider.id = 'sz-' + group.id;
+        sizeSlider.min = group.sizeRange[0];
+        sizeSlider.max = group.sizeRange[1];
+        sizeSlider.step = 1;
+        sizeSlider.value = data.size;
+        var sizeVal = document.createElement('span');
+        sizeVal.id = 'szv-' + group.id;
+        sizeVal.textContent = data.size + 'px';
+
+        sizeSlider.addEventListener('input', (function(gid, g) {
+            return function(e) {
+                var sz = parseInt(e.target.value);
+                currentLabels[gid].size = sz;
+                document.getElementById('szv-' + gid).textContent = sz + 'px';
+                // Propagate to all subs
+                g.subs.forEach(function(s) {
+                    currentLabels[gid].subs[s.layer].size = sz;
+                    var subSz = document.getElementById('sz-sub-' + s.layer);
+                    var subSzv = document.getElementById('szv-sub-' + s.layer);
+                    if (subSz) subSz.value = sz;
+                    if (subSzv) subSzv.textContent = sz + 'px';
+                });
+                applyLabelGroup(gid);
+                saveToStorage();
+            };
+        })(group.id, group));
+
+        sizeRow.appendChild(sizeMin);
+        sizeRow.appendChild(sizeSlider);
+        sizeRow.appendChild(sizeVal);
+
+        // Expandable sub-layers container
+        var subsDiv = document.createElement('div');
+        subsDiv.className = 'label-subs';
+        subsDiv.id = 'lsubs-' + group.id;
+
+        group.subs.forEach(function(sub) {
+            var subData = data.subs[sub.layer];
+            if (!subData) return;
+
+            var subDiv = document.createElement('div');
+            subDiv.className = 'label-sub';
+            subDiv.id = 'lsub-' + sub.layer;
+
+            // Sub header
+            var subHeader = document.createElement('div');
+            subHeader.className = 'label-sub-header';
+            var subName = document.createElement('span');
+            subName.className = 'sub-name';
+            subName.textContent = sub.label;
+            var subZoom = document.createElement('span');
+            subZoom.className = 'sub-zoom';
+            subZoom.id = 'lzv-sub-' + sub.layer;
+            subZoom.textContent = 'z' + subData.min + '\u2013' + subData.max;
+            subHeader.appendChild(subName);
+            subHeader.appendChild(subZoom);
+
+            // Sub zoom bar
+            var subBar = document.createElement('div');
+            subBar.className = 'zoom-bar';
+            var subClip = document.createElement('div');
+            subClip.className = 'zoom-clip';
+            subClip.id = 'zclip-sub-' + sub.layer;
+            var subHL = document.createElement('div');
+            subHL.className = 'zoom-handle left';
+            var subHR = document.createElement('div');
+            subHR.className = 'zoom-handle right';
+            subClip.appendChild(subHL);
+            subClip.appendChild(subHR);
+            subBar.appendChild(subClip);
+
+            subClip.style.left = (subData.min / MAX_ZOOM * 100) + '%';
+            subClip.style.width = Math.max(2, (subData.max - subData.min) / MAX_ZOOM * 100) + '%';
+            setupSubZoomDrag(group.id, sub.layer, subBar, subClip, subHL, subHR);
+
+            // Sub size slider
+            var subSizeRow = document.createElement('div');
+            subSizeRow.className = 'size-row';
+            var subSizeMin = document.createElement('span');
+            subSizeMin.textContent = group.sizeRange[0] + 'px';
+            var subSizeSlider = document.createElement('input');
+            subSizeSlider.type = 'range';
+            subSizeSlider.className = 'size-slider';
+            subSizeSlider.id = 'sz-sub-' + sub.layer;
+            subSizeSlider.min = group.sizeRange[0];
+            subSizeSlider.max = group.sizeRange[1];
+            subSizeSlider.value = subData.size;
+            var subSizeVal = document.createElement('span');
+            subSizeVal.id = 'szv-sub-' + sub.layer;
+            subSizeVal.textContent = subData.size + 'px';
+
+            subSizeSlider.addEventListener('input', (function(gid, lid) {
+                return function(e) {
+                    var sz = parseInt(e.target.value);
+                    currentLabels[gid].subs[lid].size = sz;
+                    document.getElementById('szv-sub-' + lid).textContent = sz + 'px';
+                    applySubLayer(gid, lid);
+                    saveToStorage();
+                };
+            })(group.id, sub.layer));
+
+            subSizeRow.appendChild(subSizeMin);
+            subSizeRow.appendChild(subSizeSlider);
+            subSizeRow.appendChild(subSizeVal);
+
+            subDiv.appendChild(subHeader);
+            subDiv.appendChild(subBar);
+            subDiv.appendChild(subSizeRow);
+            subsDiv.appendChild(subDiv);
+        });
+
+        // Toggle expand on header click
+        header.addEventListener('click', (function(sd, ar) {
+            return function() {
+                sd.classList.toggle('open');
+                ar.classList.toggle('open');
+            };
+        })(subsDiv, arrow));
+
+        row.appendChild(header);
+        row.appendChild(bar);
+        row.appendChild(sizeRow);
+        row.appendChild(subsDiv);
+        list.appendChild(row);
+    });
+}
+
+function positionClip(groupId, minZ, maxZ, clip) {
+    var pct1 = (minZ / MAX_ZOOM) * 100;
+    var pct2 = (maxZ / MAX_ZOOM) * 100;
+    clip.style.left = pct1 + '%';
+    clip.style.width = Math.max(2, pct2 - pct1) + '%';
+}
+
+function setupZoomDrag(group, bar, clip, handleL, handleR) {
+    var dragging = null;
+
+    function onDown(e, side) {
+        e.preventDefault(); e.stopPropagation();
+        dragging = side;
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+    }
+
+    function onMove(e) {
+        if (!dragging) return;
+        var rect = bar.getBoundingClientRect();
+        var pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+        var zoom = Math.round(pct * MAX_ZOOM * 2) / 2; // 0.5 steps
+        var data = currentLabels[group.id];
+
+        if (dragging === 'left') {
+            data.min = Math.min(zoom, data.max - 0.5);
+        } else {
+            data.max = Math.max(zoom, data.min + 0.5);
+        }
+
+        positionClip(group.id, data.min, data.max, clip);
+        document.getElementById('lzv-' + group.id).textContent = 'z' + data.min + '\u2013' + data.max;
+
+        // Propagate to all subs
+        group.subs.forEach(function(s) {
+            var sub = data.subs[s.layer];
+            if (sub) {
+                sub.min = data.min; sub.max = data.max;
+                var sc = document.getElementById('zclip-sub-' + s.layer);
+                if (sc) {
+                    sc.style.left = (sub.min / MAX_ZOOM * 100) + '%';
+                    sc.style.width = Math.max(2, (sub.max - sub.min) / MAX_ZOOM * 100) + '%';
+                }
+                var sv = document.getElementById('lzv-sub-' + s.layer);
+                if (sv) sv.textContent = 'z' + sub.min + '–' + sub.max;
+            }
+        });
+
+        applyLabelGroup(group.id);
+        saveToStorage();
+    }
+
+    function onUp() {
+        dragging = null;
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+    }
+
+    handleL.addEventListener('mousedown', function(e) { onDown(e, 'left'); });
+    handleR.addEventListener('mousedown', function(e) { onDown(e, 'right'); });
+
+    // Touch
+    handleL.addEventListener('touchstart', function(e) {
+        e.preventDefault(); dragging = 'left';
+        document.addEventListener('touchmove', onTouchMove);
+        document.addEventListener('touchend', onTouchEnd);
+    });
+    handleR.addEventListener('touchstart', function(e) {
+        e.preventDefault(); dragging = 'right';
+        document.addEventListener('touchmove', onTouchMove);
+        document.addEventListener('touchend', onTouchEnd);
+    });
+    function onTouchMove(e) {
+        var t = e.touches[0];
+        onMove({ clientX: t.clientX, preventDefault: function(){}, stopPropagation: function(){} });
+    }
+    function onTouchEnd() {
+        dragging = null;
+        document.removeEventListener('touchmove', onTouchMove);
+        document.removeEventListener('touchend', onTouchEnd);
+    }
+}
+
+function setupSubZoomDrag(groupId, layerId, bar, clip, handleL, handleR) {
+    var dragging = null;
+
+    function onDown(e, side) {
+        e.preventDefault(); e.stopPropagation();
+        dragging = side;
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+    }
+
+    function onMove(e) {
+        if (!dragging) return;
+        var rect = bar.getBoundingClientRect();
+        var pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+        var zoom = Math.round(pct * MAX_ZOOM * 2) / 2; // 0.5 steps
+        var sub = currentLabels[groupId].subs[layerId];
+
+        if (dragging === 'left') {
+            sub.min = Math.min(zoom, sub.max - 0.5);
+        } else {
+            sub.max = Math.max(zoom, sub.min + 0.5);
+        }
+
+        clip.style.left = (sub.min / MAX_ZOOM * 100) + '%';
+        clip.style.width = Math.max(2, (sub.max - sub.min) / MAX_ZOOM * 100) + '%';
+        var zv = document.getElementById('lzv-sub-' + layerId);
+        if (zv) zv.textContent = 'z' + sub.min + '–' + sub.max;
+        applySubLayer(groupId, layerId);
+        saveToStorage();
+    }
+
+    function onUp() {
+        dragging = null;
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+    }
+
+    handleL.addEventListener('mousedown', function(e) { onDown(e, 'left'); });
+    handleR.addEventListener('mousedown', function(e) { onDown(e, 'right'); });
+
+    handleL.addEventListener('touchstart', function(e) {
+        e.preventDefault(); dragging = 'left';
+        document.addEventListener('touchmove', onTM);
+        document.addEventListener('touchend', onTE);
+    });
+    handleR.addEventListener('touchstart', function(e) {
+        e.preventDefault(); dragging = 'right';
+        document.addEventListener('touchmove', onTM);
+        document.addEventListener('touchend', onTE);
+    });
+    function onTM(e) {
+        var t = e.touches[0];
+        onMove({ clientX: t.clientX, preventDefault: function(){}, stopPropagation: function(){} });
+    }
+    function onTE() {
+        dragging = null;
+        document.removeEventListener('touchmove', onTM);
+        document.removeEventListener('touchend', onTE);
+    }
+}
+
+
+// ─── Click to highlight ──────────────────────────────────────────────────────
+
+function setupClickHighlight() {
+    map.on('click', function(e) {
+        if (selectMode) return; // handled by select tool
+        var features = map.queryRenderedFeatures(e.point);
+        if (features.length === 0) return;
+
+        var layerId = features[0].layer.id;
+
+        // Clear all previous highlights
+        var prev = document.querySelectorAll('.highlighted');
+        for (var i = 0; i < prev.length; i++) prev[i].classList.remove('highlighted');
+
+        // Highlight matching color row
+        var colorGroupId = findGroupForLayer(layerId);
+        if (colorGroupId) {
+            var crow = document.getElementById('crow-' + colorGroupId);
+            if (crow) {
+                crow.classList.add('highlighted');
+                crow.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                setTimeout(function() { crow.classList.remove('highlighted'); }, 2000);
+            }
+        }
+
+        // Highlight matching label row + sub-layer
+        var labelMatch = findLabelGroupForLayer(layerId);
+        if (labelMatch) {
+            var lrow = document.getElementById('lrow-' + labelMatch.groupId);
+            if (lrow) {
+                lrow.classList.add('highlighted');
+                // Expand the group so sub is visible
+                var subs = document.getElementById('lsubs-' + labelMatch.groupId);
+                var arrow = lrow.querySelector('.expand-arrow');
+                if (subs && !subs.classList.contains('open')) {
+                    subs.classList.add('open');
+                    if (arrow) arrow.classList.add('open');
+                }
+                // Highlight the specific sub-layer
+                var lsub = document.getElementById('lsub-' + labelMatch.layer);
+                if (lsub) {
+                    lsub.classList.add('highlighted');
+                    lsub.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                }
+                setTimeout(function() {
+                    if (lrow) lrow.classList.remove('highlighted');
+                    if (lsub) lsub.classList.remove('highlighted');
+                }, 2000);
+            }
+        }
+    });
+}
+
+
+// ─── Select Tool — Pick, Hide, Rename labels ────────────────────────────────
+
+function closeLabelPopup() {
+    var old = document.querySelector('.label-popup');
+    if (old) old.parentNode.removeChild(old);
+}
+
+function showLabelPopup(feature, point) {
+    closeLabelPopup();
+    var props = feature.properties;
+    var layerId = feature.layer.id;
+    var name = props.name || props['name:latin'] || props['name_en'] || '(unnamed)';
+    var coords = feature.geometry ? feature.geometry.coordinates : null;
+
+    var popup = document.createElement('div');
+    popup.className = 'label-popup';
+    popup.style.left = Math.min(point.x, window.innerWidth - 300) + 'px';
+    popup.style.top = Math.min(point.y, window.innerHeight - 220) + 'px';
+
+    var isHidden = labelEdits.hidden[layerId] &&
+        labelEdits.hidden[layerId].indexOf(name) !== -1;
+    var renameEntry = null;
+    for (var i = 0; i < labelEdits.renamed.length; i++) {
+        if (labelEdits.renamed[i].layerId === layerId &&
+            labelEdits.renamed[i].originalName === name) {
+            renameEntry = labelEdits.renamed[i];
+            break;
+        }
+    }
+
+    popup.innerHTML =
+        '<div class="label-popup-name">' + escapeHtml(name) + '</div>' +
+        '<div class="label-popup-layer">' + layerId + '</div>' +
+        '<div class="label-popup-actions">' +
+            '<button class="lp-hide">' + (isHidden ? 'Show' : 'Hide') + '</button>' +
+            '<button class="lp-reset">Reset</button>' +
+        '</div>' +
+        '<div class="label-popup-rename">' +
+            '<input type="text" placeholder="New label text..." value="' +
+                escapeHtml(renameEntry ? renameEntry.newName : '') + '">' +
+            '<div class="label-popup-rename-btns">' +
+                '<button class="lp-apply">Apply</button>' +
+                '<button class="lp-cancel">Cancel</button>' +
+            '</div>' +
+        '</div>';
+
+    document.body.appendChild(popup);
+
+    // Hide / Show toggle
+    popup.querySelector('.lp-hide').addEventListener('click', function() {
+        if (isHidden) {
+            unhideLabel(layerId, name);
+        } else {
+            hideLabel(layerId, name);
+        }
+        closeLabelPopup();
+    });
+
+    // Reset
+    popup.querySelector('.lp-reset').addEventListener('click', function() {
+        unhideLabel(layerId, name);
+        removeRenamedLabel(layerId, name);
+        closeLabelPopup();
+    });
+
+    // Apply rename
+    popup.querySelector('.lp-apply').addEventListener('click', function() {
+        var newText = popup.querySelector('.label-popup-rename input').value.trim();
+        if (newText && coords) {
+            hideLabel(layerId, name);
+            addRenamedLabel(layerId, name, newText, coords);
+        }
+        closeLabelPopup();
+    });
+
+    // Cancel
+    popup.querySelector('.lp-cancel').addEventListener('click', function() {
+        closeLabelPopup();
+    });
+
+    // Enter key on input
+    popup.querySelector('.label-popup-rename input').addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') popup.querySelector('.lp-apply').click();
+        if (e.key === 'Escape') closeLabelPopup();
+    });
+}
+
+function escapeHtml(str) {
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function hideLabel(layerId, name) {
+    if (!labelEdits.hidden[layerId]) labelEdits.hidden[layerId] = [];
+    if (labelEdits.hidden[layerId].indexOf(name) === -1) {
+        labelEdits.hidden[layerId].push(name);
+    }
+    applyLabelHides(layerId);
+    saveToStorage();
+}
+
+function unhideLabel(layerId, name) {
+    if (labelEdits.hidden[layerId]) {
+        var idx = labelEdits.hidden[layerId].indexOf(name);
+        if (idx !== -1) labelEdits.hidden[layerId].splice(idx, 1);
+        if (labelEdits.hidden[layerId].length === 0) delete labelEdits.hidden[layerId];
+    }
+    applyLabelHides(layerId);
+    saveToStorage();
+}
+
+function applyLabelHides(layerId) {
+    if (!map || !map.isStyleLoaded()) return;
+    var layer = null;
+    try { layer = map.getLayer(layerId); } catch(e) { return; }
+    if (!layer) return;
+
+    // Store original filter on first use
+    if (!originalFilters[layerId]) {
+        var f = map.getFilter(layerId);
+        originalFilters[layerId] = f || true;
+    }
+
+    var hidden = labelEdits.hidden[layerId];
+    if (!hidden || hidden.length === 0) {
+        // Restore original filter
+        var orig = originalFilters[layerId];
+        map.setFilter(layerId, orig === true ? null : orig);
+        return;
+    }
+
+    // Build exclusion filter
+    var excludeFilter = ['!', ['in', ['get', 'name'], ['literal', hidden]]];
+    var orig = originalFilters[layerId];
+    if (orig && orig !== true) {
+        map.setFilter(layerId, ['all', orig, excludeFilter]);
+    } else {
+        map.setFilter(layerId, excludeFilter);
+    }
+}
+
+function applyAllLabelHides() {
+    for (var layerId in labelEdits.hidden) {
+        applyLabelHides(layerId);
+    }
+}
+
+function addRenamedLabel(layerId, originalName, newName, coordinates) {
+    // Remove existing rename for same label
+    removeRenamedLabel(layerId, originalName);
+    labelEdits.renamed.push({
+        layerId: layerId, originalName: originalName,
+        newName: newName, coordinates: coordinates
+    });
+    applyAllRenames();
+    saveToStorage();
+}
+
+function removeRenamedLabel(layerId, originalName) {
+    labelEdits.renamed = labelEdits.renamed.filter(function(r) {
+        return !(r.layerId === layerId && r.originalName === originalName);
+    });
+    applyAllRenames();
+    saveToStorage();
+}
+
+function applyAllRenames() {
+    if (!map) return;
+    var features = labelEdits.renamed.map(function(r) {
+        return {
+            type: 'Feature',
+            geometry: { type: 'Point', coordinates: r.coordinates },
+            properties: { name: r.newName, originalName: r.originalName, layerId: r.layerId }
+        };
+    });
+    var src = map.getSource('custom-labels');
+    if (src) {
+        src.setData({ type: 'FeatureCollection', features: features });
+    }
+}
+
+function setupSelectTool() {
+    var btn = document.getElementById('select-tool');
+    var mapEl = document.getElementById('map');
+
+    btn.addEventListener('click', function() {
+        selectMode = !selectMode;
+        btn.classList.toggle('active', selectMode);
+        mapEl.classList.toggle('select-mode', selectMode);
+        if (!selectMode) closeLabelPopup();
+    });
+
+    map.on('click', function(e) {
+        if (!selectMode) return;
+
+        closeLabelPopup();
+
+        // Query only symbol (label) layers
+        var features = map.queryRenderedFeatures(e.point);
+        var labelFeature = null;
+        for (var i = 0; i < features.length; i++) {
+            if (features[i].layer.type === 'symbol') {
+                labelFeature = features[i];
+                break;
+            }
+        }
+        if (!labelFeature) return;
+
+        showLabelPopup(labelFeature, e.point);
+    });
+}
+
+function resetAllLabelEdits() {
+    // Restore all original filters
+    for (var layerId in originalFilters) {
+        var orig = originalFilters[layerId];
+        try { map.setFilter(layerId, orig === true ? null : orig); } catch(e) {}
+    }
+    labelEdits = { hidden: {}, renamed: [] };
+    originalFilters = {};
+    applyAllRenames();
+    saveToStorage();
+}
+
+
+// ─── Update all UI values ────────────────────────────────────────────────────
+
+function updateAllUI() {
+    // Colors
+    COLOR_GROUPS.forEach(function(group) {
+        var color = currentColors[group.id] || group.defaultColor;
+        var picker = document.getElementById('clr-' + group.id);
+        var lt = document.getElementById('lt-' + group.id);
+        if (picker) picker.value = color;
+        if (lt) {
+            lt.value = hexToHsl(color)[2];
+            lt.style.background = lightnessGradient(color);
+        }
+    });
+    document.getElementById('logo-preview').style.backgroundColor =
+        currentColors['background'] || '#f8f4f0';
+
+    // Labels — groups + subs
+    LABEL_GROUPS.forEach(function(group) {
+        var data = currentLabels[group.id];
+        var clip = document.getElementById('zclip-' + group.id);
+        var zv = document.getElementById('lzv-' + group.id);
+        var sz = document.getElementById('sz-' + group.id);
+        var szv = document.getElementById('szv-' + group.id);
+        if (clip) positionClip(group.id, data.min, data.max, clip);
+        if (zv) zv.textContent = 'z' + data.min + '\u2013' + data.max;
+        if (sz) sz.value = data.size;
+        if (szv) szv.textContent = data.size + 'px';
+
+        // Sub-layers
+        group.subs.forEach(function(sub) {
+            var subData = data.subs ? data.subs[sub.layer] : null;
+            if (!subData) return;
+            var sc = document.getElementById('zclip-sub-' + sub.layer);
+            var sv = document.getElementById('lzv-sub-' + sub.layer);
+            var ss = document.getElementById('sz-sub-' + sub.layer);
+            var ssv = document.getElementById('szv-sub-' + sub.layer);
+            if (sc) {
+                sc.style.left = (subData.min / MAX_ZOOM * 100) + '%';
+                sc.style.width = Math.max(2, (subData.max - subData.min) / MAX_ZOOM * 100) + '%';
+            }
+            if (sv) sv.textContent = 'z' + subData.min + '\u2013' + subData.max;
+            if (ss) ss.value = subData.size;
+            if (ssv) ssv.textContent = subData.size + 'px';
+        });
+    });
+}
+
+
+// ─── Actions ──────────────────────────────────────────────────────────────────
+
+function resetAll() {
+    currentColors = loadColorDefaults();
+    currentLabels = loadLabelDefaults();
+    resetAllLabelEdits();
+    updateAllUI();
+    applyAllColors();
+    applyAllLabels();
+    saveToStorage();
+}
+
+function exportTheme() {
+    var theme = { name: 'araMaps Custom Theme', version: 3, colors: {}, labels: {} };
+    COLOR_GROUPS.forEach(function(g) {
+        theme.colors[g.id] = { label: g.label, color: currentColors[g.id] || g.defaultColor };
+    });
+    LABEL_GROUPS.forEach(function(g) {
+        var d = currentLabels[g.id];
+        theme.labels[g.id] = { label: g.label, min: d.min, max: d.max, size: d.size, subs: d.subs };
+    });
+    var blob = new Blob([JSON.stringify(theme, null, 2)], { type: 'application/json' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url; a.download = 'aramaps-theme.json';
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
+function importTheme(file) {
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            var theme = JSON.parse(e.target.result);
+            if (theme.colors) {
+                for (var key in theme.colors) {
+                    if (currentColors.hasOwnProperty(key)) {
+                        var c = theme.colors[key];
+                        currentColors[key] = (typeof c === 'string') ? c : c.color;
+                    }
+                }
+            }
+            if (theme.labels) {
+                for (var key in theme.labels) {
+                    if (currentLabels.hasOwnProperty(key)) {
+                        var l = theme.labels[key];
+                        currentLabels[key].min = l.min;
+                        currentLabels[key].max = l.max;
+                        currentLabels[key].size = l.size;
+                        if (l.subs) {
+                            for (var sk in l.subs) {
+                                if (currentLabels[key].subs && currentLabels[key].subs[sk]) {
+                                    currentLabels[key].subs[sk] = l.subs[sk];
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            updateAllUI();
+            applyAllColors();
+            applyAllLabels();
+            saveToStorage();
+        } catch (err) {
+            alert('Invalid theme file');
+        }
+    };
+    reader.readAsText(file);
+}
+
+
+// ─── Init ─────────────────────────────────────────────────────────────────────
+
+(function init() {
+    var R2 = 'https://aramaps-tiles.aramukmail.workers.dev';
+
+    if (maplibregl.getRTLTextPluginStatus() === 'unavailable') {
+        maplibregl.setRTLTextPlugin(R2 + '/kurdish-rtl-all.js', false);
+    }
+
+    loadFromStorage();
+    buildColorPanel();
+    buildLabelPanel();
+
+    var origin = window.location.origin;
+    Promise.all([
+        fetch(R2 + '/style.json').then(function(r) { return r.json(); }),
+        fetch(R2 + '/iraq-mask-30.json').then(function(r) { return r.json(); })
+    ]).then(function(results) {
+        var style = results[0];
+        var maskFC = results[1];
+
+            style.sources.openmaptiles.tiles = [R2 + '/tiles/{z}/{x}/{y}.pbf'];
+            style.glyphs = R2 + '/tiles/fonts/{fontstack}/{range}.pbf';
+            style.sprite = R2 + '/tiles/sprites/ofm';
+
+            // Hide only labels below zoom 5.8 (satellite zone)
+            // except country labels filtered to Iraq only
+            style.layers.forEach(function(layer) {
+                if (layer.id.indexOf('label_country') === 0) {
+                    layer.filter = ['==', ['get', 'name'], 'Iraq'];
+                } else if (layer.type === 'symbol') {
+                    layer.minzoom = Math.max(layer.minzoom || 0, 5.8);
+                }
+            });
+
+            // Iraq border mask — same as main app
+            style.sources['iraq-mask'] = { type: 'geojson', data: maskFC };
+            style.layers.push({
+                id: 'iraq-mask-layer',
+                type: 'fill',
+                source: 'iraq-mask',
+                paint: {
+                    'fill-color': '#f8f4f0',
+                    'fill-opacity': ['get', 'opacity']
+                }
+            });
+
+            // Custom labels source (for renamed labels)
+            style.sources['custom-labels'] = {
+                type: 'geojson',
+                data: { type: 'FeatureCollection', features: [] }
+            };
+            style.layers.push({
+                id: 'custom-labels-layer',
+                type: 'symbol',
+                source: 'custom-labels',
+                layout: {
+                    'text-field': ['get', 'name'],
+                    'text-font': ['araMaps Regular'],
+                    'text-size': 16,
+                    'text-max-width': 10
+                },
+                paint: {
+                    'text-color': '#333',
+                    'text-halo-color': '#fff',
+                    'text-halo-width': 1.5
+                }
+            });
+
+            // Local satellite imagery on top of mask
+            style.sources['world-raster'] = {
+                type: 'raster',
+                tiles: [R2 + '/satellite/{z}/{x}/{y}.png'],
+                tileSize: 256,
+                maxzoom: 2
+            };
+            style.layers.push({
+                id: 'world-raster-layer',
+                type: 'raster',
+                source: 'world-raster',
+                paint: {
+                    'raster-opacity': [
+                        'interpolate', ['linear'], ['zoom'],
+                        0, 0.1,
+                        4, 0.1,
+                        6, 0
+                    ]
+                }
+            });
+
+            map = new maplibregl.Map({
+                container: 'map',
+                style: style,
+                center: [44.36, 35.56],
+                zoom: 7,
+                minZoom: 0,
+                attributionControl: false
+            });
+
+            map.on('styleimagemissing', function(e) {
+                if (!map.hasImage(e.id)) {
+                    map.addImage(e.id, { width: 1, height: 1, data: new Uint8Array(4) });
+                }
+            });
+
+            map.addControl(new maplibregl.NavigationControl(), 'top-right');
+
+            // Remove MapLibre logo
+            map.on('load', function() {
+                var logos = document.querySelectorAll('.maplibregl-ctrl-logo');
+                for (var i = 0; i < logos.length; i++) logos[i].parentNode.removeChild(logos[i]);
+            });
+
+            // Live zoom display
+            map.on('zoom', function() {
+                document.getElementById('zoom-level').textContent = map.getZoom().toFixed(1);
+            });
+
+            map.on('load', function() {
+                applyAllColors();
+                applyAllLabels();
+                setupClickHighlight();
+                setupSelectTool();
+                applyAllLabelHides();
+                applyAllRenames();
+            });
+        });
+
+    // Buttons
+    document.getElementById('btn-reset').addEventListener('click', resetAll);
+    document.getElementById('btn-export').addEventListener('click', exportTheme);
+    document.getElementById('btn-import').addEventListener('click', function() {
+        document.getElementById('import-file').click();
+    });
+    document.getElementById('import-file').addEventListener('change', function(e) {
+        if (e.target.files.length > 0) {
+            importTheme(e.target.files[0]);
+            e.target.value = '';
+        }
+    });
+
+    // Sprite switching
+    var spriteSelect = document.getElementById('sprite-select');
+    spriteSelect.addEventListener('change', function() {
+        if (!map) return;
+        var val = spriteSelect.value;
+        var newSprite = val.indexOf('R2:') === 0 ? R2 + val.slice(3) : origin + val.slice(6);
+        var center = map.getCenter();
+        var zoom = map.getZoom();
+        var bearing = map.getBearing();
+        var pitch = map.getPitch();
+        var style = map.getStyle();
+        style.sprite = newSprite;
+        map.setStyle(style);
+        map.once('style.load', function() {
+            map.jumpTo({ center: center, zoom: zoom, bearing: bearing, pitch: pitch });
+            applyAllColors();
+            applyAllLabels();
+            // Reapply label edits (hides + renames) after style reload
+            originalFilters = {}; // reset since style was replaced
+            applyAllLabelHides();
+            applyAllRenames();
+        });
+    });
+
+    // ─── Drag to move ────────────────────────────────────────────────────────
+    var panel = document.getElementById('panel');
+    var header = document.getElementById('panel-header');
+    var dragX = 0, dragY = 0, startLeft = 0, startTop = 0, dragging = false;
+
+    function onDragStart(ex, ey) {
+        dragging = true;
+        dragX = ex; dragY = ey;
+        startLeft = panel.offsetLeft;
+        startTop = panel.offsetTop;
+    }
+    function onDragMove(ex, ey) {
+        if (!dragging) return;
+        var dx = ex - dragX, dy = ey - dragY;
+        var newLeft = Math.max(0, Math.min(window.innerWidth - panel.offsetWidth, startLeft + dx));
+        var newTop = Math.max(0, Math.min(window.innerHeight - panel.offsetHeight, startTop + dy));
+        panel.style.left = newLeft + 'px';
+        panel.style.top = newTop + 'px';
+    }
+    function onDragEnd() { dragging = false; }
+
+    header.addEventListener('mousedown', function(e) { onDragStart(e.clientX, e.clientY); });
+    document.addEventListener('mousemove', function(e) { onDragMove(e.clientX, e.clientY); });
+    document.addEventListener('mouseup', onDragEnd);
+
+    header.addEventListener('touchstart', function(e) {
+        var t = e.touches[0]; onDragStart(t.clientX, t.clientY);
+    }, { passive: true });
+    document.addEventListener('touchmove', function(e) {
+        if (dragging) { var t = e.touches[0]; onDragMove(t.clientX, t.clientY); }
+    }, { passive: true });
+    document.addEventListener('touchend', onDragEnd);
+})();
+</script>
+</body>
+</html>
