@@ -41,15 +41,15 @@
             display: flex; flex-direction: column;
         }
 
-        /* Logo header — tap to collapse/expand */
+        /* Logo header row */
         #logo-preview {
-            padding: 12px 16px;
-            display: flex; align-items: center; gap: 10px;
+            padding: 0;
+            display: flex; align-items: stretch;
             justify-content: space-between;
             transition: background-color 0.3s;
             border-bottom: 1px solid rgba(255,255,255,0.08);
             flex-shrink: 0;
-            cursor: pointer; user-select: none;
+            user-select: none;
         }
         #panel-body { display: none; }
         #panel-body.open { display: flex; flex-direction: column; flex: 1; overflow: hidden; }
@@ -61,8 +61,20 @@
         .brand-ara { color: #f29120; }
         .brand-maps { color: #384ca0; }
 
-        #logo-left { display: flex; align-items: center; gap: 10px; }
-        #zoom-display { display: flex; flex-direction: column; align-items: center; }
+        /* Left = tap to collapse */
+        #logo-left {
+            display: flex; align-items: center; gap: 10px;
+            padding: 10px 12px; cursor: pointer; flex: 1;
+        }
+        #logo-left:active { background: rgba(255,255,255,0.06); }
+        /* Right = drag handle */
+        #zoom-display {
+            display: flex; flex-direction: column; align-items: center;
+            justify-content: center;
+            padding: 10px 14px; cursor: grab;
+            border-left: 1px solid rgba(255,255,255,0.08);
+        }
+        #zoom-display:active { cursor: grabbing; }
         #zoom-level {
             font-size: 28px; font-weight: 700; line-height: 1;
             font-family: 'PT Sans Narrow', sans-serif;
@@ -1852,10 +1864,10 @@ function importTheme(file) {
         }
     });
 
-    // Panel collapse/expand (tap logo row to toggle)
+    // Panel collapse/expand (tap logo to toggle, drag zoom to move)
     var panelBody = document.getElementById('panel-body');
-    var logoPreview = document.getElementById('logo-preview');
-    var panelDragged = false;
+    var logoLeft = document.getElementById('logo-left');
+    var zoomHandle = document.getElementById('zoom-display');
 
     // Sprite switching
     var spriteSelect = document.getElementById('sprite-select');
@@ -1881,51 +1893,42 @@ function importTheme(file) {
         });
     });
 
-    // ─── Drag to move (on logo row) + tap to collapse ──────────────────────
+    // ─── Logo left = tap to collapse/expand ─────────────────────────────────
+    logoLeft.addEventListener('click', function() {
+        panelBody.classList.toggle('open');
+    });
+
+    // ─── Zoom right = drag to move panel ─────────────────────────────────────
     var panel = document.getElementById('panel');
     var dragX = 0, dragY = 0, startLeft = 0, startTop = 0, dragging = false;
 
     function onDragStart(ex, ey) {
         dragging = true;
-        panelDragged = false;
         dragX = ex; dragY = ey;
         startLeft = panel.offsetLeft;
         startTop = panel.offsetTop;
     }
     function onDragMove(ex, ey) {
         if (!dragging) return;
-        var dx = ex - dragX, dy = ey - dragY;
-        if (Math.abs(dx) > 3 || Math.abs(dy) > 3) panelDragged = true;
-        if (!panelDragged) return;
         var gap = 8;
-        var newLeft = Math.max(gap, Math.min(window.innerWidth - panel.offsetWidth - gap, startLeft + dx));
-        var newTop = Math.max(gap, Math.min(window.innerHeight - panel.offsetHeight - gap, startTop + dy));
+        var newLeft = Math.max(gap, Math.min(window.innerWidth - panel.offsetWidth - gap, startLeft + (ex - dragX)));
+        var newTop = Math.max(gap, Math.min(window.innerHeight - panel.offsetHeight - gap, startTop + (ey - dragY)));
         panel.style.left = newLeft + 'px';
         panel.style.top = newTop + 'px';
     }
     function onDragEnd() { dragging = false; }
 
-    function togglePanel() {
-        panelBody.classList.toggle('open');
-    }
-
-    logoPreview.addEventListener('mousedown', function(e) { onDragStart(e.clientX, e.clientY); });
+    zoomHandle.addEventListener('mousedown', function(e) { e.preventDefault(); onDragStart(e.clientX, e.clientY); });
     document.addEventListener('mousemove', function(e) { onDragMove(e.clientX, e.clientY); });
-    document.addEventListener('mouseup', function() {
-        if (dragging && !panelDragged) togglePanel();
-        onDragEnd();
-    });
+    document.addEventListener('mouseup', onDragEnd);
 
-    logoPreview.addEventListener('touchstart', function(e) {
+    zoomHandle.addEventListener('touchstart', function(e) {
         var t = e.touches[0]; onDragStart(t.clientX, t.clientY);
     }, { passive: true });
     document.addEventListener('touchmove', function(e) {
         if (dragging) { var t = e.touches[0]; onDragMove(t.clientX, t.clientY); }
     }, { passive: true });
-    document.addEventListener('touchend', function() {
-        if (dragging && !panelDragged) togglePanel();
-        onDragEnd();
-    });
+    document.addEventListener('touchend', onDragEnd);
 })();
 </script>
 </body>
