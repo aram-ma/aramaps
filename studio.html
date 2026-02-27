@@ -45,14 +45,21 @@
         #panel-header {
             padding: 10px 14px 8px;
             border-bottom: 1px solid rgba(255,255,255,0.08);
-            cursor: grab; user-select: none;
-            text-align: center; flex-shrink: 0;
+            cursor: pointer; user-select: none;
+            display: flex; align-items: center; gap: 8px;
+            flex-shrink: 0;
         }
-        #panel-header:active { cursor: grabbing; }
+        #panel-header .panel-arrow {
+            font-size: 10px; color: #666; transition: transform 0.2s;
+        }
+        #panel-header .panel-arrow.open { transform: rotate(90deg); }
         #panel-header h2 {
             font-size: 13px; font-weight: 700; letter-spacing: 1px;
-            text-transform: uppercase; color: #999; margin: 0;
+            text-transform: uppercase; color: #999; margin: 0; flex: 1;
+            text-align: center;
         }
+        #panel-body { display: none; }
+        #panel-body.open { display: flex; flex-direction: column; flex: 1; overflow: hidden; }
 
         /* Logo preview */
         #logo-preview {
@@ -116,7 +123,7 @@
             100% { background: rgba(242, 145, 32, 0); }
         }
         .color-row-top {
-            display: flex; align-items: center; gap: 8px;
+            display: flex; align-items: center; gap: 6px;
             cursor: pointer;
         }
         .color-row-top .expand-arrow {
@@ -125,10 +132,13 @@
         }
         .color-row-top .expand-arrow.open { transform: rotate(90deg); }
         .color-row label {
-            flex: 1; font-size: 12px; font-weight: 400;
+            flex: 1; font-size: 11px; font-weight: 400;
             color: #bbb; cursor: pointer;
         }
-        .color-detail { display: none; padding-top: 2px; }
+        .color-row input[type="color"] {
+            width: 24px; height: 18px;
+        }
+        .color-detail { display: none; padding: 2px 0 2px 16px; }
         .color-detail.open { display: block; }
         .color-row input[type="color"] {
             -webkit-appearance: none;
@@ -401,7 +411,15 @@
         .lp-cancel:hover { background: rgba(255,255,255,0.18); }
 
         @media (max-width: 600px) {
-            #panel { width: 250px; top: 8px; left: 8px; }
+            #panel { width: 200px; top: 8px; left: 8px; font-size: 11px; }
+            #panel-header h2 { font-size: 11px; }
+            #logo-preview { padding: 8px 10px; }
+            #logo-preview img { width: 28px; height: 28px; }
+            .brand-text { font-size: 16px !important; }
+            #zoom-level { font-size: 20px; }
+            #color-list, #label-list { padding: 2px 6px; }
+            .color-row label { font-size: 10px; }
+            .lbl-name { font-size: 10px !important; }
             #map-qr { width: 60px; height: 60px; }
             #map-logo-row img { width: 36px; height: 36px; }
             #map-logo-row { font-size: 12px; }
@@ -429,9 +447,11 @@
 
 <div id="panel">
     <div id="panel-header">
-        <h2>Color Theme Studio</h2>
+        <span class="panel-arrow open">&#x25B6;</span>
+        <h2>aramaps Studio</h2>
     </div>
 
+    <div id="panel-body" class="open">
     <div id="logo-preview">
         <div id="logo-left">
             <img src="/logo.svg" alt="">
@@ -453,7 +473,7 @@
         <div id="sprite-section">
             <label>Icon Set (Sprites)</label>
             <select id="sprite-select">
-                <option value="R2:/tiles/sprites/ofm">OpenFreeMap (264)</option>
+                <option value="R2:/sprites/ofm">OpenFreeMap (264)</option>
                 <option value="LOCAL:/sprites/maki">Maki (215)</option>
                 <option value="LOCAL:/sprites/temaki">Temaki (543)</option>
             </select>
@@ -465,12 +485,12 @@
         <button id="btn-export">Export</button>
         <button id="btn-import">Import</button>
     </div>
+    </div><!-- /panel-body -->
 </div>
 
 <input type="file" id="import-file" accept=".json">
 
 <script src="https://unpkg.com/maplibre-gl@5.18.0/dist/maplibre-gl.js"></script>
-<script src="/mapbox-gl-rtl-text.js"></script>
 <script>
 // ─── Color Group Definitions ──────────────────────────────────────────────────
 
@@ -509,6 +529,9 @@ var COLOR_GROUPS = [
                 prop: 'line-color' }] },
     { id: 'buildings', label: 'Buildings', defaultColor: '#d4ccc4',
       rules: [{ prefixes: ['building'], prop: 'fill-color' }] },
+    { id: 'buildings_3d', label: '3D Buildings', defaultColor: '#d9d0c9',
+      rules: [{ match: ['building-3d'], prop: 'fill-extrusion-color' }],
+      opacity: { match: ['building-3d'], prop: 'fill-extrusion-opacity', default: 0.8 } },
     { id: 'boundaries', label: 'Boundaries', defaultColor: '#8060a0',
       rules: [{ prefixes: ['boundary_'], prop: 'line-color' }] },
     { id: 'labels', label: 'Labels', defaultColor: '#333333',
@@ -590,6 +613,7 @@ var LABEL_GROUPS = [
 
 var STORAGE_KEY = 'aramaps-studio-v2';
 var currentColors = {};
+var currentOpacities = {};
 var currentLabels = {};
 var labelEdits = { hidden: {}, renamed: [] };
 var originalFilters = {};
@@ -600,6 +624,14 @@ function loadColorDefaults() {
     var c = {};
     COLOR_GROUPS.forEach(function(g) { c[g.id] = g.defaultColor; });
     return c;
+}
+
+function loadOpacityDefaults() {
+    var o = {};
+    COLOR_GROUPS.forEach(function(g) {
+        if (g.opacity) o[g.id] = g.opacity.default;
+    });
+    return o;
 }
 
 function loadLabelDefaults() {
@@ -618,10 +650,16 @@ function loadFromStorage() {
         var saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
         if (saved) {
             currentColors = loadColorDefaults();
+            currentOpacities = loadOpacityDefaults();
             currentLabels = loadLabelDefaults();
             if (saved.colors) {
                 for (var k in saved.colors) {
                     if (currentColors.hasOwnProperty(k)) currentColors[k] = saved.colors[k];
+                }
+            }
+            if (saved.opacities) {
+                for (var k in saved.opacities) {
+                    if (currentOpacities.hasOwnProperty(k)) currentOpacities[k] = saved.opacities[k];
                 }
             }
             if (saved.labels) {
@@ -638,13 +676,14 @@ function loadFromStorage() {
         }
     } catch (e) {}
     currentColors = loadColorDefaults();
+    currentOpacities = loadOpacityDefaults();
     currentLabels = loadLabelDefaults();
 }
 
 function saveToStorage() {
     try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify({
-            colors: currentColors, labels: currentLabels, labelEdits: labelEdits
+            colors: currentColors, opacities: currentOpacities, labels: currentLabels, labelEdits: labelEdits
         }));
     } catch (e) {}
 }
@@ -746,8 +785,25 @@ function applyColor(groupId, color) {
     }
 }
 
+function applyOpacity(groupId, value) {
+    if (!map || !map.isStyleLoaded()) return;
+    var group = null;
+    for (var i = 0; i < COLOR_GROUPS.length; i++) {
+        if (COLOR_GROUPS[i].id === groupId) { group = COLOR_GROUPS[i]; break; }
+    }
+    if (!group || !group.opacity) return;
+    var layers = map.getStyle().layers;
+    for (var j = 0; j < layers.length; j++) {
+        var lid = layers[j].id;
+        if (layerMatchesRule(lid, group.opacity)) {
+            try { map.setPaintProperty(lid, group.opacity.prop, value); } catch (e) {}
+        }
+    }
+}
+
 function applyAllColors() {
     for (var key in currentColors) applyColor(key, currentColors[key]);
+    for (var key in currentOpacities) applyOpacity(key, currentOpacities[key]);
 }
 
 function findLabelGroupForLayer(layerId) {
@@ -872,6 +928,39 @@ function buildColorPanel() {
         })(group.id));
 
         detail.appendChild(lt);
+
+        // Opacity slider (only for groups with opacity property)
+        if (group.opacity) {
+            var opLabel = document.createElement('div');
+            opLabel.style.cssText = 'font-size:9px;color:#888;margin-top:6px;display:flex;justify-content:space-between;';
+            var opText = document.createElement('span');
+            opText.textContent = 'Opacity';
+            var opVal = document.createElement('span');
+            opVal.id = 'opval-' + group.id;
+            opVal.textContent = Math.round((currentOpacities[group.id] !== undefined ? currentOpacities[group.id] : group.opacity.default) * 100) + '%';
+            opLabel.appendChild(opText);
+            opLabel.appendChild(opVal);
+            detail.appendChild(opLabel);
+
+            var opSlider = document.createElement('input');
+            opSlider.type = 'range';
+            opSlider.className = 'lightness-slider';
+            opSlider.id = 'op-' + group.id;
+            opSlider.min = 0; opSlider.max = 100; opSlider.step = 1;
+            opSlider.value = Math.round((currentOpacities[group.id] !== undefined ? currentOpacities[group.id] : group.opacity.default) * 100);
+            opSlider.style.background = 'linear-gradient(to right, transparent, #888)';
+            opSlider.addEventListener('input', (function(gid) {
+                return function(e) {
+                    var v = parseInt(e.target.value) / 100;
+                    currentOpacities[gid] = v;
+                    applyOpacity(gid, v);
+                    saveToStorage();
+                    var valEl = document.getElementById('opval-' + gid);
+                    if (valEl) valEl.textContent = Math.round(v * 100) + '%';
+                };
+            })(group.id));
+            detail.appendChild(opSlider);
+        }
 
         // Toggle expand on header click
         top.addEventListener('click', (function(d, a) {
@@ -1510,7 +1599,7 @@ function resetAllLabelEdits() {
 // ─── Update all UI values ────────────────────────────────────────────────────
 
 function updateAllUI() {
-    // Colors
+    // Colors + opacities
     COLOR_GROUPS.forEach(function(group) {
         var color = currentColors[group.id] || group.defaultColor;
         var picker = document.getElementById('clr-' + group.id);
@@ -1519,6 +1608,13 @@ function updateAllUI() {
         if (lt) {
             lt.value = hexToHsl(color)[2];
             lt.style.background = lightnessGradient(color);
+        }
+        if (group.opacity) {
+            var opSlider = document.getElementById('op-' + group.id);
+            var opVal = document.getElementById('opval-' + group.id);
+            var v = currentOpacities[group.id] !== undefined ? currentOpacities[group.id] : group.opacity.default;
+            if (opSlider) opSlider.value = Math.round(v * 100);
+            if (opVal) opVal.textContent = Math.round(v * 100) + '%';
         }
     });
     document.getElementById('logo-preview').style.backgroundColor =
@@ -1560,6 +1656,7 @@ function updateAllUI() {
 
 function resetAll() {
     currentColors = loadColorDefaults();
+    currentOpacities = loadOpacityDefaults();
     currentLabels = loadLabelDefaults();
     resetAllLabelEdits();
     updateAllUI();
@@ -1569,9 +1666,12 @@ function resetAll() {
 }
 
 function exportTheme() {
-    var theme = { name: 'araMaps Custom Theme', version: 3, colors: {}, labels: {} };
+    var theme = { name: 'araMaps Custom Theme', version: 3, colors: {}, opacities: {}, labels: {} };
     COLOR_GROUPS.forEach(function(g) {
         theme.colors[g.id] = { label: g.label, color: currentColors[g.id] || g.defaultColor };
+        if (g.opacity && currentOpacities[g.id] !== undefined) {
+            theme.opacities[g.id] = currentOpacities[g.id];
+        }
     });
     LABEL_GROUPS.forEach(function(g) {
         var d = currentLabels[g.id];
@@ -1596,6 +1696,13 @@ function importTheme(file) {
                     if (currentColors.hasOwnProperty(key)) {
                         var c = theme.colors[key];
                         currentColors[key] = (typeof c === 'string') ? c : c.color;
+                    }
+                }
+            }
+            if (theme.opacities) {
+                for (var key in theme.opacities) {
+                    if (currentOpacities.hasOwnProperty(key)) {
+                        currentOpacities[key] = theme.opacities[key];
                     }
                 }
             }
@@ -1649,9 +1756,8 @@ function importTheme(file) {
         var style = results[0];
         var maskFC = results[1];
 
-            style.sources.openmaptiles.tiles = [R2 + '/tiles/{z}/{x}/{y}.pbf'];
-            style.glyphs = R2 + '/tiles/fonts/{fontstack}/{range}.pbf';
-            style.sprite = R2 + '/tiles/sprites/ofm';
+            // style.json from R2 already has correct absolute URLs
+            // for tiles, glyphs, and sprites — do not override
 
             // Hide only labels below zoom 5.8 (satellite zone)
             // except country labels filtered to Iraq only
@@ -1769,6 +1875,11 @@ function importTheme(file) {
         }
     });
 
+    // Panel collapse/expand (only on click, not drag)
+    var panelBody = document.getElementById('panel-body');
+    var panelArrow = document.querySelector('.panel-arrow');
+    var panelDragged = false;
+
     // Sprite switching
     var spriteSelect = document.getElementById('sprite-select');
     spriteSelect.addEventListener('change', function() {
@@ -1800,6 +1911,7 @@ function importTheme(file) {
 
     function onDragStart(ex, ey) {
         dragging = true;
+        panelDragged = false;
         dragX = ex; dragY = ey;
         startLeft = panel.offsetLeft;
         startTop = panel.offsetTop;
@@ -1807,6 +1919,8 @@ function importTheme(file) {
     function onDragMove(ex, ey) {
         if (!dragging) return;
         var dx = ex - dragX, dy = ey - dragY;
+        if (Math.abs(dx) > 3 || Math.abs(dy) > 3) panelDragged = true;
+        if (!panelDragged) return;
         var newLeft = Math.max(0, Math.min(window.innerWidth - panel.offsetWidth, startLeft + dx));
         var newTop = Math.max(0, Math.min(window.innerHeight - panel.offsetHeight, startTop + dy));
         panel.style.left = newLeft + 'px';
@@ -1816,7 +1930,13 @@ function importTheme(file) {
 
     header.addEventListener('mousedown', function(e) { onDragStart(e.clientX, e.clientY); });
     document.addEventListener('mousemove', function(e) { onDragMove(e.clientX, e.clientY); });
-    document.addEventListener('mouseup', onDragEnd);
+    document.addEventListener('mouseup', function() {
+        if (dragging && !panelDragged) {
+            panelBody.classList.toggle('open');
+            panelArrow.classList.toggle('open');
+        }
+        onDragEnd();
+    });
 
     header.addEventListener('touchstart', function(e) {
         var t = e.touches[0]; onDragStart(t.clientX, t.clientY);
@@ -1824,7 +1944,13 @@ function importTheme(file) {
     document.addEventListener('touchmove', function(e) {
         if (dragging) { var t = e.touches[0]; onDragMove(t.clientX, t.clientY); }
     }, { passive: true });
-    document.addEventListener('touchend', onDragEnd);
+    document.addEventListener('touchend', function() {
+        if (dragging && !panelDragged) {
+            panelBody.classList.toggle('open');
+            panelArrow.classList.toggle('open');
+        }
+        onDragEnd();
+    });
 })();
 </script>
 </body>
