@@ -1,0 +1,6 @@
+name = "aramaps"
+compatibility_date = "2024-01-01"
+
+# Deploy as Cloudflare Pages (static site)
+# Run: npx wrangler pages deploy . --project-name aramaps
+# Then add custom domain: aramaps.jeedlee.com in Cloudflare dashboard
