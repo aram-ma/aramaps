@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="ku" dir="ltr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>aramaps Overlay</title>
+    <link rel="icon" type="image/png" href="/icon-192.png">
+    <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.18.0/dist/maplibre-gl.css">
+    <style>
+        @font-face {
+            font-family: 'PT Sans Narrow';
+            src: url('https://aramaps-tiles.aramukmail.workers.dev/fonts/PTSansNarrow-Regular.ttf') format('truetype');
+            font-weight: 400; font-style: normal; font-display: swap;
+        }
+        @font-face {
+            font-family: 'PT Sans Narrow';
+            src: url('https://aramaps-tiles.aramukmail.workers.dev/fonts/PTSansNarrow-Bold.ttf') format('truetype');
+            font-weight: 700; font-style: normal; font-display: swap;
+        }
+        @font-face {
+            font-family: 'Noto Naskh Arabic';
+            src: url('https://aramaps-tiles.aramukmail.workers.dev/fonts/NotoNaskhArabic.ttf') format('truetype');
+            font-weight: 400 700; font-style: normal; font-display: swap;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            overflow: hidden;
+            font-family: 'PT Sans Narrow', 'Noto Naskh Arabic', sans-serif;
+        }
+        #map { position: absolute; top: 0; bottom: 0; width: 100%; }
+
+        /* Brand — lower left */
+        #brand {
+            position: absolute; bottom: 10px; left: 10px; z-index: 1;
+            display: flex; align-items: center; gap: 0;
+            font: bold 16px 'PT Sans Narrow', 'Noto Naskh Arabic', sans-serif;
+            pointer-events: none;
+        }
+        #brand-ara { color: #f29120; margin-left: -8px; }
+        #brand-maps { color: #384ca0; }
+
+        /* Search bar */
+        #search-bar {
+            position: absolute; top: 12px; left: 12px; z-index: 2;
+            display: flex; align-items: center; gap: 0;
+            background: #fff; border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+            width: 320px; max-width: calc(100vw - 80px);
+            overflow: hidden;
+        }
+        #search-input {
+            flex: 1; border: none; outline: none;
+            padding: 10px 14px; font-size: 15px;
+            font-family: 'PT Sans Narrow', 'Noto Naskh Arabic', sans-serif;
+        }
+        #search-input::placeholder { color: #aaa; }
+        #search-btn {
+            background: none; border: none; cursor: pointer;
+            padding: 10px 12px; font-size: 18px; color: #384ca0;
+        }
+        #search-btn:hover { color: #f29120; }
+
+        /* Zoom display */
+        #zoom-display {
+            position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+            z-index: 2; background: rgba(0,0,0,0.7); color: #fff;
+            font: bold 28px 'PT Sans Narrow', sans-serif;
+            padding: 8px 20px; border-radius: 8px;
+            pointer-events: none; display: none;
+        }
+
+        /* Overlay panel — lower right */
+        #overlay-panel {
+            position: absolute; bottom: 16px; right: 16px; z-index: 10;
+            background: rgba(30, 30, 40, 0.92);
+            border-radius: 10px;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+            color: #e0e0e0;
+            backdrop-filter: blur(8px);
+            min-width: 220px; max-width: 320px;
+            font-size: 13px;
+        }
+        #overlay-panel-header {
+            padding: 10px 14px;
+            font-weight: 700; font-size: 14px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        #overlay-panel-header span { color: #f29120; }
+        #overlay-list {
+            padding: 6px 10px;
+            max-height: 200px; overflow-y: auto;
+        }
+        .overlay-item {
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            padding: 6px 0;
+        }
+        .overlay-item:last-child { border-bottom: none; }
+        .overlay-item-header {
+            display: flex; align-items: center; gap: 8px;
+            cursor: pointer;
+        }
+        .overlay-item input[type="checkbox"] { accent-color: #f29120; }
+        .overlay-item label { cursor: pointer; flex: 1; }
+        .overlay-item .expand-btn {
+            background: none; border: none; color: #888; cursor: pointer;
+            font-size: 11px; padding: 2px 4px;
+        }
+        .overlay-item .expand-btn:hover { color: #fff; }
+        .overlay-controls {
+            display: none;
+            padding: 6px 0 2px 24px;
+        }
+        .overlay-controls.open { display: block; }
+        .overlay-controls .ctrl-row {
+            display: flex; align-items: center; gap: 6px;
+            margin-bottom: 4px; font-size: 11px;
+        }
+        .overlay-controls .ctrl-row label {
+            width: 50px; color: #aaa; font-size: 11px;
+        }
+        .overlay-controls input[type="color"] {
+            width: 24px; height: 20px; border: none; padding: 0;
+            background: none; cursor: pointer;
+        }
+        .overlay-controls input[type="range"] {
+            width: 80px; accent-color: #f29120;
+        }
+        .overlay-controls .ctrl-val {
+            color: #aaa; width: 28px; text-align: right; font-size: 11px;
+        }
+        .delete-btn {
+            background: rgba(200,50,50,0.25); color: #e55; border: 1px solid rgba(200,50,50,0.4);
+            border-radius: 4px; padding: 3px 10px; cursor: pointer; font-size: 11px;
+            font-family: 'PT Sans Narrow', sans-serif;
+        }
+        .delete-btn:hover { background: rgba(200,50,50,0.5); color: #fff; }
+        #overlay-empty {
+            padding: 10px 14px;
+            color: #888; font-style: italic;
+        }
+
+        /* Drop zone */
+        #drop-overlay {
+            display: none;
+            position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+            z-index: 100;
+            background: rgba(56, 76, 160, 0.85);
+            color: #fff;
+            font: bold 28px 'PT Sans Narrow', sans-serif;
+            justify-content: center; align-items: center;
+            pointer-events: none;
+        }
+
+        @media (max-width: 600px) {
+            #search-bar { width: calc(100vw - 70px); }
+            #brand { font-size: 13px; }
+            #overlay-panel { bottom: 10px; right: 10px; min-width: 160px; }
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+
+    <div id="search-bar">
+        <input id="search-input" type="text" placeholder="Search places...">
+        <button id="search-btn">&#x1F50D;</button>
+    </div>
+
+    <div id="brand">
+        <img src="/logo.svg" alt="" style="width:48px;height:48px;">
+        <span id="brand-ara">ara</span><span id="brand-maps">maps</span>
+    </div>
+
+    <div id="zoom-display">Z 6.0</div>
+
+    <div id="overlay-panel">
+        <div id="overlay-panel-header">
+            <span>Overlays</span>
+            <small>D = toggle all</small>
+        </div>
+        <div id="overlay-list">
+            <div id="overlay-empty">Drop .dxf files on map</div>
+        </div>
+    </div>
+
+    <div id="drop-overlay">Drop DXF file here</div>
+
+    <script src="https://unpkg.com/maplibre-gl@5.18.0/dist/maplibre-gl.js"></script>
+    <script>
+        var R2 = 'https://aramaps-tiles.aramukmail.workers.dev';
+        var overlayColors = ['#e6194b', '#3cb44b', '#4363d8', '#f58231', '#911eb4', '#42d4f4', '#f032e6', '#bfef45'];
+        var overlayCount = 0;
+        var overlaysVisible = true;
+        var loadedOverlays = {};
+        var map;
+
+        // RTL plugin
+        if (maplibregl.getRTLTextPluginStatus() === 'unavailable') {
+            maplibregl.setRTLTextPlugin(R2 + '/kurdish-rtl-all.js', false);
+        }
+
+        // Fetch style + mask
+        Promise.all([
+            fetch(R2 + '/style.json').then(function(r) { return r.json(); }),
+            fetch(R2 + '/iraq-mask-30.json').then(function(r) { return r.json(); })
+        ]).then(function(results) {
+            var style = results[0];
+            var maskFC = results[1];
+
+            style.sources['iraq-mask'] = { type: 'geojson', data: maskFC };
+            style.layers.push({
+                id: 'iraq-mask-layer',
+                type: 'fill',
+                source: 'iraq-mask',
+                paint: { 'fill-color': '#f8f4f0', 'fill-opacity': ['get', 'opacity'] }
+            });
+
+            map = new maplibregl.Map({
+                container: 'map',
+                style: style,
+                center: [44.009, 36.191],
+                zoom: 6,
+                maxBounds: [[32.5, 22.5], [55.0, 43.8]],
+                renderWorldCopies: false,
+                attributionControl: false
+            });
+
+            map.on('styleimagemissing', function(e) {
+                if (!map.hasImage(e.id)) {
+                    map.addImage(e.id, { width: 1, height: 1, data: new Uint8Array(4) });
+                }
+            });
+
+            map.on('load', function() {
+                var logos = document.querySelectorAll('.maplibregl-ctrl-logo');
+                for (var i = 0; i < logos.length; i++) logos[i].parentNode.removeChild(logos[i]);
+
+                // Load existing overlays from server
+                loadExistingOverlays();
+            });
+
+            map.addControl(new maplibregl.NavigationControl(), 'top-right');
+            map.addControl(new maplibregl.GeolocateControl({
+                positionOptions: { enableHighAccuracy: true },
+                trackUserLocation: true
+            }), 'top-right');
+
+            // Zoom display (Z key)
+            var zoomEl = document.getElementById('zoom-display');
+            map.on('zoom', function() {
+                zoomEl.textContent = 'Z ' + map.getZoom().toFixed(1);
+            });
+
+            document.addEventListener('keydown', function(e) {
+                if (e.target.tagName === 'INPUT') return;
+                if (e.key === 'z' || e.key === 'Z') {
+                    zoomEl.style.display = zoomEl.style.display === 'none' ? 'block' : 'none';
+                }
+                if (e.key === 'd' || e.key === 'D') {
+                    toggleAllOverlays();
+                }
+            });
+
+            // Search
+            var searchInput = document.getElementById('search-input');
+            var searchBtn = document.getElementById('search-btn');
+            var searchMarker = null;
+
+            function doSearch() {
+                var q = searchInput.value.trim();
+                if (!q) return;
+                fetch('https://nominatim.openstreetmap.org/search?format=json&q=' + encodeURIComponent(q) + '&viewbox=32.5,22.5,55.0,43.8&bounded=1&limit=1')
+                    .then(function(r) { return r.json(); })
+                    .then(function(results) {
+                        if (!results.length) return;
+                        var r = results[0];
+                        var lng = parseFloat(r.lon);
+                        var lat = parseFloat(r.lat);
+                        map.flyTo({ center: [lng, lat], zoom: 14 });
+                        if (searchMarker) searchMarker.remove();
+                        searchMarker = new maplibregl.Marker({ color: '#f29120' })
+                            .setLngLat([lng, lat])
+                            .setPopup(new maplibregl.Popup().setText(r.display_name))
+                            .addTo(map)
+                            .togglePopup();
+                    });
+            }
+
+            searchBtn.addEventListener('click', doSearch);
+            searchInput.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter') doSearch();
+            });
+        });
+
+        // ─── Overlay functions ─────────────────────────────
+
+        function loadExistingOverlays() {
+            fetch('/api/overlays')
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    if (data.overlays && data.overlays.length > 0) {
+                        data.overlays.forEach(function(ov) {
+                            addOverlayToMap(ov.name, '/overlays/' + ov.file);
+                        });
+                    }
+                })
+                .catch(function() {});
+        }
+
+        function addOverlayToMap(name, url) {
+            fetch(url)
+                .then(function(r) { return r.json(); })
+                .then(function(geojson) {
+                    var color = overlayColors[overlayCount % overlayColors.length];
+                    var srcId = 'overlay-' + name;
+                    overlayCount++;
+
+                    map.addSource(srcId, { type: 'geojson', data: geojson });
+
+                    // Polygon fill
+                    map.addLayer({
+                        id: srcId + '-fill',
+                        type: 'fill',
+                        source: srcId,
+                        filter: ['==', '$type', 'Polygon'],
+                        paint: { 'fill-color': color, 'fill-opacity': 0.1 }
+                    });
+
+                    // Polygon + line outlines
+                    map.addLayer({
+                        id: srcId + '-line',
+                        type: 'line',
+                        source: srcId,
+                        filter: ['any', ['==', '$type', 'Polygon'], ['==', '$type', 'LineString']],
+                        paint: { 'line-color': color, 'line-width': 1.5 }
+                    });
+
+                    // Points
+                    map.addLayer({
+                        id: srcId + '-point',
+                        type: 'circle',
+                        source: srcId,
+                        filter: ['==', '$type', 'Point'],
+                        paint: { 'circle-radius': 3, 'circle-color': color }
+                    });
+
+                    // Labels (for TEXT/MTEXT entities)
+                    map.addLayer({
+                        id: srcId + '-label',
+                        type: 'symbol',
+                        source: srcId,
+                        minzoom: 19,
+                        filter: ['all', ['==', '$type', 'Point'], ['has', 'text']],
+                        layout: {
+                            'text-field': ['get', 'text'],
+                            'text-size': 11,
+                            'text-offset': [0, 1.2],
+                            'text-anchor': 'top',
+                            'text-allow-overlap': false,
+                            'text-ignore-placement': false,
+                            'text-padding': 4
+                        },
+                        paint: { 'text-color': '#222222', 'text-halo-color': '#ffffff', 'text-halo-width': 1.5 }
+                    });
+
+                    loadedOverlays[name] = {
+                        source: srcId,
+                        layers: [srcId + '-fill', srcId + '-line', srcId + '-point', srcId + '-label'],
+                        color: color,
+                        visible: true,
+                        fillOpacity: 0.1,
+                        lineWidth: 1.5,
+                        labelsOn: true,
+                        pointsOn: true,
+                        labelColor: '#222222',
+                        labelHalo: '#ffffff',
+                        labelMinZoom: 19
+                    };
+
+                    updateOverlayPanel();
+
+                    // Zoom to overlay bounds
+                    var bounds = new maplibregl.LngLatBounds();
+                    var hasCoords = false;
+                    geojson.features.forEach(function(f) {
+                        var g = f.geometry;
+                        if (g.type === 'Point') {
+                            bounds.extend(g.coordinates); hasCoords = true;
+                        } else if (g.type === 'LineString') {
+                            g.coordinates.forEach(function(c) { bounds.extend(c); hasCoords = true; });
+                        } else if (g.type === 'Polygon') {
+                            g.coordinates[0].forEach(function(c) { bounds.extend(c); hasCoords = true; });
+                        }
+                    });
+                    if (hasCoords) {
+                        map.fitBounds(bounds, { padding: 60, maxZoom: 17 });
+                    }
+                });
+        }
+
+        function toggleAllOverlays() {
+            overlaysVisible = !overlaysVisible;
+            var vis = overlaysVisible ? 'visible' : 'none';
+            Object.keys(loadedOverlays).forEach(function(name) {
+                var ov = loadedOverlays[name];
+                ov.visible = overlaysVisible;
+                ov.layers.forEach(function(layerId) {
+                    map.setLayoutProperty(layerId, 'visibility', vis);
+                });
+            });
+            updateOverlayPanel();
+        }
+
+        function toggleOverlay(name) {
+            var ov = loadedOverlays[name];
+            ov.visible = !ov.visible;
+            var vis = ov.visible ? 'visible' : 'none';
+            ov.layers.forEach(function(layerId) {
+                map.setLayoutProperty(layerId, 'visibility', vis);
+            });
+        }
+
+        function updateOverlayPanel() {
+            var list = document.getElementById('overlay-list');
+            var names = Object.keys(loadedOverlays);
+            if (names.length === 0) {
+                list.innerHTML = '<div id="overlay-empty">Drop .dxf files on map</div>';
+                return;
+            }
+            var html = '';
+            names.forEach(function(name) {
+                var ov = loadedOverlays[name];
+                var checked = ov.visible ? 'checked' : '';
+                var n = name.replace(/'/g, "\\'");
+                html += '<div class="overlay-item" id="oi-' + name + '">';
+                html += '  <div class="overlay-item-header">';
+                html += '    <input type="checkbox" ' + checked + ' onchange="toggleOverlay(\'' + n + '\')">';
+                html += '    <span style="color:' + ov.color + ';">&#9632;</span>';
+                html += '    <label onclick="toggleOverlay(\'' + n + '\')">' + name + '</label>';
+                html += '    <button class="expand-btn" onclick="toggleControls(\'' + n + '\')">&#9881;</button>';
+                html += '  </div>';
+                html += '  <div class="overlay-controls" id="ctrl-' + name + '">';
+                html += '    <div class="ctrl-row"><label>Color</label>';
+                html += '      <input type="color" value="' + ov.color + '" onchange="setOverlayColor(\'' + n + '\', this.value)"></div>';
+                html += '    <div class="ctrl-row"><label>Opacity</label>';
+                html += '      <input type="range" min="0" max="100" value="' + (ov.fillOpacity * 100) + '" oninput="setOverlayOpacity(\'' + n + '\', this.value); this.nextElementSibling.textContent=this.value+\'%\'">';
+                html += '      <span class="ctrl-val">' + Math.round(ov.fillOpacity * 100) + '%</span></div>';
+                html += '    <div class="ctrl-row"><label>Line</label>';
+                html += '      <input type="range" min="0.5" max="5" step="0.5" value="' + ov.lineWidth + '" oninput="setOverlayLineWidth(\'' + n + '\', this.value); this.nextElementSibling.textContent=this.value+\'px\'">';
+                html += '      <span class="ctrl-val">' + ov.lineWidth + 'px</span></div>';
+                html += '    <div class="ctrl-row"><label>Labels</label>';
+                html += '      <input type="checkbox" ' + (ov.labelsOn ? 'checked' : '') + ' onchange="toggleOverlayLabels(\'' + n + '\', this.checked)" style="accent-color:#f29120"></div>';
+                html += '    <div class="ctrl-row"><label>Text</label>';
+                html += '      <input type="color" value="' + ov.labelColor + '" onchange="setLabelColor(\'' + n + '\', this.value)"></div>';
+                html += '    <div class="ctrl-row"><label>Stroke</label>';
+                html += '      <input type="color" value="' + ov.labelHalo + '" onchange="setLabelHalo(\'' + n + '\', this.value)"></div>';
+                html += '    <div class="ctrl-row"><label>Zoom</label>';
+                html += '      <input type="range" min="1" max="22" step="1" value="' + ov.labelMinZoom + '" oninput="setLabelMinZoom(\'' + n + '\', this.value); this.nextElementSibling.textContent=\'z\'+this.value">';
+                html += '      <span class="ctrl-val">z' + ov.labelMinZoom + '</span></div>';
+                html += '    <div class="ctrl-row"><label>Points</label>';
+                html += '      <input type="checkbox" ' + (ov.pointsOn ? 'checked' : '') + ' onchange="toggleOverlayPoints(\'' + n + '\', this.checked)" style="accent-color:#f29120"></div>';
+                html += '    <div class="ctrl-row" style="margin-top:4px"><button class="delete-btn" onclick="deleteOverlay(\'' + n + '\')">Delete overlay</button></div>';
+                html += '  </div>';
+                html += '</div>';
+            });
+            list.innerHTML = html;
+        }
+
+        function toggleControls(name) {
+            var el = document.getElementById('ctrl-' + name);
+            if (el) el.classList.toggle('open');
+        }
+
+        function setOverlayColor(name, color) {
+            var ov = loadedOverlays[name];
+            ov.color = color;
+            map.setPaintProperty(ov.source + '-fill', 'fill-color', color);
+            map.setPaintProperty(ov.source + '-line', 'line-color', color);
+            map.setPaintProperty(ov.source + '-point', 'circle-color', color);
+            // Update the color swatch
+            var item = document.getElementById('oi-' + name);
+            if (item) {
+                var swatch = item.querySelector('.overlay-item-header span');
+                if (swatch) swatch.style.color = color;
+            }
+        }
+
+        function setOverlayOpacity(name, val) {
+            var ov = loadedOverlays[name];
+            ov.fillOpacity = val / 100;
+            map.setPaintProperty(ov.source + '-fill', 'fill-opacity', ov.fillOpacity);
+        }
+
+        function setOverlayLineWidth(name, val) {
+            var ov = loadedOverlays[name];
+            ov.lineWidth = parseFloat(val);
+            map.setPaintProperty(ov.source + '-line', 'line-width', ov.lineWidth);
+        }
+
+        function toggleOverlayLabels(name, on) {
+            var ov = loadedOverlays[name];
+            ov.labelsOn = on;
+            map.setLayoutProperty(ov.source + '-label', 'visibility', on ? 'visible' : 'none');
+        }
+
+        function setLabelColor(name, color) {
+            var ov = loadedOverlays[name];
+            ov.labelColor = color;
+            map.setPaintProperty(ov.source + '-label', 'text-color', color);
+        }
+
+        function setLabelHalo(name, color) {
+            var ov = loadedOverlays[name];
+            ov.labelHalo = color;
+            map.setPaintProperty(ov.source + '-label', 'text-halo-color', color);
+        }
+
+        function setLabelMinZoom(name, val) {
+            var ov = loadedOverlays[name];
+            ov.labelMinZoom = parseInt(val);
+            map.setLayerZoomRange(ov.source + '-label', ov.labelMinZoom, 24);
+        }
+
+        function toggleOverlayPoints(name, on) {
+            var ov = loadedOverlays[name];
+            ov.pointsOn = on;
+            map.setLayoutProperty(ov.source + '-point', 'visibility', on ? 'visible' : 'none');
+        }
+
+        function deleteOverlay(name) {
+            if (!confirm('Delete overlay "' + name + '"?\n\nThis will remove the file from the server.')) return;
+            var ov = loadedOverlays[name];
+            // Remove layers and source from map
+            ov.layers.forEach(function(layerId) {
+                if (map.getLayer(layerId)) map.removeLayer(layerId);
+            });
+            if (map.getSource(ov.source)) map.removeSource(ov.source);
+            // Delete from server
+            fetch('/api/overlays/' + name, { method: 'DELETE' }).catch(function() {});
+            delete loadedOverlays[name];
+            updateOverlayPanel();
+        }
+
+        // ─── Drag and drop ─────────────────────────────────
+
+        var dropEl = document.getElementById('drop-overlay');
+
+        document.addEventListener('dragover', function(e) {
+            e.preventDefault();
+            dropEl.style.display = 'flex';
+        });
+
+        document.addEventListener('dragleave', function(e) {
+            if (e.relatedTarget === null || e.relatedTarget === document.documentElement) {
+                dropEl.style.display = 'none';
+            }
+        });
+
+        document.addEventListener('drop', function(e) {
+            e.preventDefault();
+            dropEl.style.display = 'none';
+
+            var files = e.dataTransfer.files;
+            for (var i = 0; i < files.length; i++) {
+                var file = files[i];
+                if (!file.name.toLowerCase().endsWith('.dxf')) {
+                    alert('Only .dxf files are supported');
+                    continue;
+                }
+                var epsg = prompt('EPSG code for ' + file.name + '?\n\nCommon codes:\n  32637 = UTM Zone 37N\n  32638 = UTM Zone 38N\n  32639 = UTM Zone 39N', '32638');
+                if (!epsg) continue;
+
+                uploadDxf(file, parseInt(epsg));
+            }
+        });
+
+        function uploadDxf(file, epsg) {
+            var formData = new FormData();
+            formData.append('file', file);
+            formData.append('epsg', epsg);
+
+            fetch('/api/upload-dxf', { method: 'POST', body: formData })
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    if (data.error) {
+                        alert('Error: ' + data.error);
+                        return;
+                    }
+                    addOverlayToMap(data.name, '/overlays/' + data.file);
+                })
+                .catch(function(err) {
+                    alert('Upload failed: ' + err.message);
+                });
+        }
+    </script>
+</body>
+</html>
